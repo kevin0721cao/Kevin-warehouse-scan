@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#111827" />
+  <title>蚂蚁云仓｜按箱盘点 WMS V2.1</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <style>
+    :root{--bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--ok:#15803d;--okbg:#dcfce7;--bad:#b91c1c;--badbg:#fee2e2;--warn:#b45309;--warnbg:#fef3c7;--blue:#1d4ed8;--bluebg:#dbeafe}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,"Microsoft YaHei",sans-serif}
+    .app{max-width:980px;margin:auto;padding:14px}.header{background:#111827;color:white;padding:18px;border-radius:16px;margin-bottom:12px}
+    .header h1{font-size:22px;margin:0 0 5px}.header p{margin:0;color:#d1d5db;font-size:13px}
+    .card{background:var(--card);border-radius:14px;padding:15px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+    .title{font-weight:700;font-size:17px;margin-bottom:10px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input,button{font-size:16px} input[type=text],input[type=file]{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:white}
+    button{border:0;border-radius:10px;padding:12px 15px;font-weight:700;cursor:pointer}.primary{background:#111827;color:white}.blue{background:var(--blue);color:white}
+    .green{background:var(--ok);color:white}.red{background:var(--bad);color:white}.gray{background:#e5e7eb;color:#111827}.orange{background:#d97706;color:white}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.stat{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+    .stat b{display:block;font-size:24px}.stat span{font-size:12px;color:var(--muted)}
+    .current{border:2px solid #111827}.box-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+    .box-no{font-size:25px;font-weight:800}.badge{display:inline-block;border-radius:999px;padding:5px 10px;font-size:13px;font-weight:700}
+    .badge-blue{background:var(--bluebg);color:var(--blue)}.badge-ok{background:var(--okbg);color:var(--ok)}.badge-bad{background:var(--badbg);color:var(--bad)}
+    .sku-list{margin-top:12px;display:grid;gap:8px}.sku-item{border:1px solid var(--line);border-radius:11px;padding:11px;background:#fff}
+    .sku-item.done{background:var(--okbg);border-color:#86efac}.sku-code{font-weight:800;font-size:17px}.sku-name{font-size:14px;margin-top:3px}.sku-meta{font-size:12px;color:var(--muted);margin-top:4px}
+    .extra{background:var(--badbg);border-color:#fca5a5}.scan-area{display:grid;grid-template-columns:1fr auto;gap:8px}
+    .scan-input{font-size:22px!important;font-weight:700;letter-spacing:1px}.message{margin-top:10px;border-radius:10px;padding:11px;font-weight:700;display:none}
+    .message.show{display:block}.message.ok{background:var(--okbg);color:var(--ok)}.message.bad{background:var(--badbg);color:var(--bad)}.message.warn{background:var(--warnbg);color:var(--warn)}
+    table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:9px;text-align:left}th{background:#f8fafc;position:sticky;top:0}
+    .table-wrap{overflow:auto;max-height:380px}.status-ok{color:var(--ok);font-weight:700}.status-bad{color:var(--bad);font-weight:700}.status-warn{color:var(--warn);font-weight:700}
+    #reader{width:100%;margin-top:10px}.hidden{display:none!important}.small{font-size:12px;color:var(--muted);line-height:1.5}
+    .progress{height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:10px}.progress>div{height:100%;background:#111827;width:0}
+    .switch-line{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.switch-line label{display:flex;gap:7px;align-items:center;font-weight:700}
+    .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px}.abnormal-only{background:var(--badbg)!important}
+    body.large-mode .box-no{font-size:36px}body.large-mode .sku-code{font-size:25px}body.large-mode .sku-name{font-size:19px}
+    body.large-mode .scan-input{font-size:28px!important}body.large-mode button{font-size:18px;padding:15px}
+    body.large-mode .stat b{font-size:31px}body.large-mode .title{font-size:21px}
+    .customer-name{font-size:18px;font-weight:800;color:#bfdbfe;margin-top:7px}
+    .countdown{font-size:14px;color:var(--ok);font-weight:700;margin-top:7px;display:none}.countdown.show{display:block}
+    @media(max-width:680px){.stats{grid-template-columns:repeat(2,1fr)}.stats .stat:first-child{grid-column:1/-1}.scan-area{grid-template-columns:1fr}.toolbar{grid-template-columns:1fr}.header h1{font-size:20px}.app{padding:9px}.box-no{font-size:21px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>蚂蚁云仓｜按箱盘点 WMS <small style="font-size:12px;color:#93c5fd">V2.1</small></h1>
+    <p>上传客户原始 Excel → 按箱扫描 SKU → 反馈实收箱数与异常箱</p><div id="headerCustomer" class="customer-name">尚未选择客户</div>
+  </div>
+
+  <div class="card">
+    <div class="title">① 上传客户入库单</div>
+    <input id="fileInput" type="file" accept=".xlsx,.xls" />
+    <div id="fileInfo" class="small" style="margin-top:8px">支持列名：SKU、SKU码、数量、箱数；自动识别“箱数”列的合并单元格为混装箱。</div>
+    <div class="row" style="margin-top:10px">
+      <button class="red" id="clearAllBtn">清除全部数据</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">② 盘点设置</div>
+    <div class="toolbar">
+      <div>
+        <div class="small">客户名称（会写入导出报告）</div>
+        <input id="customerInput" type="text" placeholder="例如：JM箱包" />
+      </div>
+      <div class="switch-line" style="align-self:end;padding-bottom:8px">
+        <label><input id="autoFinishToggle" type="checkbox" checked /> SKU全部确认后自动完成本箱</label>
+        <label><input id="largeModeToggle" type="checkbox" /> 大字体模式</label>
+      </div>
+    </div>
+    <div class="small" style="margin-top:8px">自动完成会在最后一个正确 SKU 扫描后等待约1秒，再进入下一箱；发现错箱 SKU 时不会自动完成。</div>
+  </div>
+
+  <div class="card">
+    <div class="title">实时箱数统计</div>
+    <div class="stats">
+      <div class="stat"><b id="planned">0</b><span>计划箱数</span></div>
+      <div class="stat"><b id="received">0</b><span>已盘点/实收</span></div>
+      <div class="stat"><b id="normal">0</b><span>正常箱</span></div>
+      <div class="stat"><b id="abnormal">0</b><span>异常箱</span></div>
+      <div class="stat"><b id="remaining">0</b><span>未盘点/可能短少</span></div>
+    </div>
+    <div class="progress"><div id="progressBar"></div></div>
+  </div>
+
+  <div class="card current" id="workCard">
+    <div class="box-head">
+      <div>
+        <div class="small">当前盘点</div>
+        <div class="box-no" id="currentBoxNo">请先上传 Excel</div>
+        <div id="boxType" class="badge badge-blue" style="margin-top:6px">等待清单</div>
+      </div>
+      <div style="text-align:right">
+        <div class="small">SKU确认进度</div>
+        <div style="font-size:24px;font-weight:800" id="skuProgress">0 / 0</div><div id="autoCountdown" class="countdown">本箱正确，正在自动进入下一箱…</div>
+      </div>
+    </div>
+
+    <div class="sku-list" id="expectedList"></div>
+    <div id="extraWrap" class="hidden">
+      <div class="title" style="margin-top:14px;color:var(--bad)">本箱多出/错箱 SKU</div>
+      <div class="sku-list" id="extraList"></div>
+    </div>
+
+    <div style="margin-top:14px">
+      <div class="scan-area">
+        <input id="scanInput" class="scan-input" type="text" inputmode="numeric" autocomplete="off" placeholder="点击这里，用扫码枪扫描 SKU码" />
+        <button class="blue" id="scanBtn">确认扫描</button>
+      </div>
+      <div id="message" class="message"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="gray" id="cameraBtn">打开手机摄像头</button>
+        <button class="gray" id="undoBtn">撤销上一次扫描</button>
+      </div>
+      <div id="reader" class="hidden"></div>
+    </div>
+
+    <div class="row" style="margin-top:15px">
+      <button class="green" id="finishBtn">完成本箱并进入下一箱</button>
+      <button class="orange" id="missingBtn">本箱未收到</button>
+    </div>
+    <div class="small" style="margin-top:8px">混装箱内每个 SKU 只需扫描一次。少扫的 SKU 会被标记为“缺少”；扫入不属于本箱的 SKU 会被标记为“多出/错箱”。</div>
+  </div>
+
+  <div class="card">
+    <div class="title">盘点结果</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>箱号</th><th>箱型</th><th>状态</th><th>缺少 SKU</th><th>多出 SKU</th></tr></thead>
+        <tbody id="resultBody"><tr><td colspan="5" class="small">暂无盘点记录</td></tr></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="red" id="abnormalBtn">只看异常箱</button><button class="primary" id="exportBtn">导出客户盘点报告 Excel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY='antWarehouseCartonAuditV2';
+let state={fileName:'',sheetName:'',customerName:'',autoFinish:true,largeMode:false,templates:[],results:[],currentIndex:0,currentScans:[],extras:[],scanHistory:[]};
+let html5QrCode=null, autoFinishTimer=null, showAbnormalOnly=false;
+
+const $=id=>document.getElementById(id);
+const clean=v=>String(v??'').trim();
+const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
+const unique=a=>[...new Set(a)];
+
+function beep(type='ok'){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const play=(freq,start,duration)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);
+      o.frequency.value=freq;g.gain.value=.09;o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+duration);
+    };
+    if(type==='ok') play(950,0,.10);
+    else if(type==='repeat'){play(520,0,.08);play(520,.12,.08);}
+    else {play(240,0,.12);play(190,.16,.18);}
+  }catch(e){}
+  if(navigator.vibrate) navigator.vibrate(type==='ok'?60:type==='repeat'?[70,50,70]:[130,70,180]);
+}
+function msg(text,type='ok'){
+  const el=$('message');el.textContent=text;el.className='message show '+type;
+  clearTimeout(msg.t);msg.t=setTimeout(()=>el.className='message',3500);
+}
+function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
+function load(){
+  try{
+    const s=JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if(s&&Array.isArray(s.templates)) state={...state,...s};
+  }catch(e){}
+  document.body.classList.toggle('large-mode',!!state.largeMode);
+  render();
+}
+function normalizeHeader(v){return clean(v).replace(/\s+/g,'').toLowerCase()}
+function findHeaderRow(ws){
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+  for(let r=range.s.r;r<=Math.min(range.e.r,30);r++){
+    const vals=[];
+    for(let c=range.s.c;c<=range.e.c;c++) vals.push(normalizeHeader(ws[XLSX.utils.encode_cell({r,c})]?.v));
+    if(vals.includes('sku') && vals.some(x=>['sku码','条形码','条码','gtin'].includes(x)) && vals.includes('箱数')) return r;
+  }
+  return -1;
+}
+function findCol(ws,row,names){
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let c=range.s.c;c<=range.e.c;c++){
+    const h=normalizeHeader(ws[XLSX.utils.encode_cell({r:row,c})]?.v);
+    if(names.includes(h)) return c;
+  }
+  return -1;
+}
+function cellVal(ws,r,c){
+  const cell=ws[XLSX.utils.encode_cell({r,c})];
+  return cell ? (cell.v ?? cell.w ?? '') : '';
+}
+function locateMerge(merges,r,c){
+  return merges.find(m=>m.s.c===c && m.e.c===c && r>=m.s.r && r<=m.e.r);
+}
+function parseWorkbook(data,fileName){
+  const wb=XLSX.read(data,{type:'array',cellFormula:true,cellNF:true,cellText:true});
+  let selected=null,header=-1;
+  for(const name of wb.SheetNames){
+    const ws=wb.Sheets[name],hr=findHeaderRow(ws);
+    if(hr>=0){selected={name,ws};header=hr;break}
+  }
+  if(!selected) throw new Error('没有找到包含 SKU、SKU码、数量、箱数 的工作表。');
+  const ws=selected.ws, merges=ws['!merges']||[];
+  const nameCol=findCol(ws,header,['sku','商品名称','名称']);
+  const codeCol=findCol(ws,header,['sku码','条形码','条码','gtin']);
+  const qtyCol=findCol(ws,header,['数量','总数','件数']);
+  const cartonCol=findCol(ws,header,['箱数']);
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  const processed=new Set(),groups=[];
+  for(let r=header+1;r<=range.e.r;r++){
+    if(processed.has(r)) continue;
+    const name=clean(cellVal(ws,r,nameCol)), code=clean(cellVal(ws,r,codeCol));
+    if(!name && !code) continue;
+    const merge=locateMerge(merges,r,cartonCol);
+    if(merge){
+      if(r!==merge.s.r) continue;
+      const items=[];
+      for(let rr=merge.s.r;rr<=merge.e.r;rr++){
+        processed.add(rr);
+        const n=clean(cellVal(ws,rr,nameCol)),c=clean(cellVal(ws,rr,codeCol)),q=num(cellVal(ws,rr,qtyCol));
+        if(n||c) items.push({code:c,name:n,qty:q,row:rr+1});
+      }
+      const boxes=Math.max(1,Math.round(num(cellVal(ws,merge.s.r,cartonCol))||1));
+      groups.push({items,boxes,sourceRows:`${merge.s.r+1}-${merge.e.r+1}`,mixed:items.length>1});
+    }else{
+      const boxes=Math.round(num(cellVal(ws,r,cartonCol)));
+      if(boxes<=0) continue;
+      groups.push({items:[{code,name,qty:num(cellVal(ws,r,qtyCol)),row:r+1}],boxes,sourceRows:String(r+1),mixed:false});
+      processed.add(r);
+    }
+  }
+  const templates=[];
+  let no=1;
+  for(const g of groups){
+    for(let i=0;i<g.boxes;i++){
+      templates.push({boxNo:no++,type:g.items.length>1?'混装箱':'单SKU箱',items:g.items.map(x=>({...x})),sourceRows:g.sourceRows});
+    }
+  }
+  if(!templates.length) throw new Error('找到了工作表，但没有读取到有效箱数。');
+  const guessedCustomer=fileName.replace(/\.[^.]+$/,'').split(/[【\[_（(]/)[0].trim();
+  state={fileName,sheetName:selected.name,customerName:state.customerName||guessedCustomer,autoFinish:state.autoFinish!==false,largeMode:!!state.largeMode,templates,results:[],currentIndex:0,currentScans:[],extras:[],scanHistory:[]};
+  save();render();
+  $('fileInfo').innerHTML=`已读取：<b>${fileName}</b><br>工作表：${selected.name}；计划箱数：<b>${templates.length}</b>；混装箱：<b>${templates.filter(x=>x.type==='混装箱').length}</b>。`;
+  msg('清单读取成功，可以开始盘点。','ok');
+}
+$('fileInput').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{parseWorkbook(await f.arrayBuffer(),f.name)}catch(err){msg(err.message,'bad');console.error(err)}
+});
+
+function current(){return state.templates[state.currentIndex]||null}
+function scanCode(raw){
+  const code=clean(raw).replace(/\s+/g,'');
+  $('scanInput').value='';
+  const box=current();
+  if(!box){msg('没有可盘点的箱子，请上传清单或已全部完成。','warn');return}
+  if(!code)return;
+  const expected=box.items.find(x=>clean(x.code)===code);
+  if(expected){
+    if(state.currentScans.includes(code)){msg(`${code} 已经确认过，不需要重复扫描。`,'warn');beep('repeat');return}
+    state.currentScans.push(code);state.scanHistory.push({kind:'expected',code});msg(`已确认：${expected.name}`,'ok');beep('ok');
+  }else{
+    state.extras.push(code);state.scanHistory.push({kind:'extra',code});msg(`本箱清单没有 SKU码：${code}，已记录为多出/错箱。`,'bad');beep('bad');
+  }
+  save();render();setTimeout(()=>$('scanInput').focus(),80);
+  scheduleAutoFinish();
+}
+$('scanBtn').onclick=()=>scanCode($('scanInput').value);
+$('scanInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scanCode(e.target.value)}});
+
+function scheduleAutoFinish(){
+  clearTimeout(autoFinishTimer);
+  const box=current();
+  if(!box || !state.autoFinish || state.extras.length) return;
+  const expectedCodes=unique(box.items.map(x=>clean(x.code)).filter(Boolean));
+  if(!expectedCodes.length || !expectedCodes.every(c=>state.currentScans.includes(c))) return;
+  $('autoCountdown').classList.add('show');
+  autoFinishTimer=setTimeout(()=>{
+    $('autoCountdown').classList.remove('show');
+    finishCurrent(true,true);
+  },1000);
+}
+$('undoBtn').onclick=()=>{
+  const last=state.scanHistory.pop();if(!last){msg('没有可以撤销的扫描。','warn');return}
+  const arr=last.kind==='expected'?state.currentScans:state.extras;
+  const idx=arr.lastIndexOf(last.code);if(idx>=0)arr.splice(idx,1);
+  save();render();msg('已撤销上一次扫描。','warn');
+};
+function finishCurrent(received=true,fromAuto=false){
+  clearTimeout(autoFinishTimer);$('autoCountdown').classList.remove('show');
+  const box=current();if(!box)return;
+  const expectedCodes=unique(box.items.map(x=>clean(x.code)).filter(Boolean));
+  const missing=expectedCodes.filter(c=>!state.currentScans.includes(c));
+  const extras=unique(state.extras);
+  const status=!received?'未收到':(missing.length===0&&extras.length===0?'正常':'异常');
+  state.results.push({
+    boxNo:box.boxNo,type:box.type,status,received,
+    expectedCount:expectedCodes.length,confirmedCount:expectedCodes.length-missing.length,
+    missing,extras,items:box.items,fileName:state.fileName,finishedAt:new Date().toLocaleString()
+  });
+  state.currentIndex++;state.currentScans=[];state.extras=[];state.scanHistory=[];
+  save();render();
+  msg(status==='正常'?`第${box.boxNo}箱盘点正常。`:status==='未收到'?`第${box.boxNo}箱已标记为未收到。`:`第${box.boxNo}箱存在异常，已记录。`,status==='正常'?'ok':'bad');
+  setTimeout(()=>$('scanInput').focus(),100);
+}
+$('finishBtn').onclick=()=>finishCurrent(true);
+$('missingBtn').onclick=()=>{if(confirm('确认这一个计划箱没有收到吗？'))finishCurrent(false)};
+
+function render(){
+  $('customerInput').value=state.customerName||'';
+  $('autoFinishToggle').checked=state.autoFinish!==false;
+  $('largeModeToggle').checked=!!state.largeMode;
+  $('headerCustomer').textContent=state.customerName||'尚未填写客户名称';
+  document.body.classList.toggle('large-mode',!!state.largeMode);
+  const planned=state.templates.length;
+  const rec=state.results.filter(x=>x.received).length;
+  const normal=state.results.filter(x=>x.status==='正常').length;
+  const abnormal=state.results.filter(x=>x.status==='异常').length;
+  $('planned').textContent=planned;$('received').textContent=rec;$('normal').textContent=normal;$('abnormal').textContent=abnormal;$('remaining').textContent=Math.max(0,planned-state.results.length);
+  $('progressBar').style.width=planned?`${Math.min(100,state.results.length/planned*100)}%`:'0%';
+  const box=current(),list=$('expectedList');list.innerHTML='';
+  if(!box){
+    $('currentBoxNo').textContent=planned?'全部计划箱已处理':'请先上传 Excel';$('boxType').textContent=planned?'盘点完成':'等待清单';$('skuProgress').textContent='0 / 0';
+    $('finishBtn').disabled=$('missingBtn').disabled=$('scanBtn').disabled=true;
+  }else{
+    $('finishBtn').disabled=$('missingBtn').disabled=$('scanBtn').disabled=false;
+    $('currentBoxNo').textContent=`第 ${box.boxNo} 箱 / 共 ${planned} 箱`;$('boxType').textContent=box.type;
+    const codes=unique(box.items.map(x=>clean(x.code)).filter(Boolean)),done=codes.filter(c=>state.currentScans.includes(c)).length;
+    $('skuProgress').textContent=`${done} / ${codes.length}`;
+    box.items.forEach(it=>{
+      const d=document.createElement('div');const ok=state.currentScans.includes(clean(it.code));d.className='sku-item'+(ok?' done':'');
+      d.innerHTML=`<div class="sku-code">${ok?'✓ ':'○ '}${escapeHtml(it.code||'无SKU码')}</div><div class="sku-name">${escapeHtml(it.name)}</div><div class="sku-meta">清单数量：${it.qty||'-'}；Excel行：${it.row}</div>`;list.appendChild(d);
+    });
+  }
+  $('extraWrap').classList.toggle('hidden',state.extras.length===0);
+  $('extraList').innerHTML=unique(state.extras).map(c=>`<div class="sku-item extra"><div class="sku-code">⚠ ${escapeHtml(c)}</div><div class="sku-name">不属于当前箱</div></div>`).join('');
+  const body=$('resultBody');
+  if(!state.results.length)body.innerHTML='<tr><td colspan="5" class="small">暂无盘点记录</td></tr>';
+  else { const visible=(showAbnormalOnly?state.results.filter(r=>r.status!=='正常'):state.results); body.innerHTML=visible.length?[...visible].reverse().map(r=>`<tr><td>第${r.boxNo}箱</td><td>${r.type}</td><td class="${r.status==='正常'?'status-ok':r.status==='异常'?'status-bad':'status-warn'}">${r.status}</td><td>${r.missing.join('、')||'-'}</td><td>${r.extras.join('、')||'-'}</td></tr>`).join(''):'<tr><td colspan="5" class="small">没有异常箱</td></tr>'; }
+  if(state.fileName)$('fileInfo').innerHTML=`当前清单：<b>${escapeHtml(state.fileName)}</b><br>工作表：${escapeHtml(state.sheetName)}；刷新页面会自动恢复进度。`;
+}
+function escapeHtml(s){return clean(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+
+$('cameraBtn').onclick=async()=>{
+  const reader=$('reader');
+  if(html5QrCode){
+    try{await html5QrCode.stop()}catch(e){} html5QrCode.clear();html5QrCode=null;reader.classList.add('hidden');$('cameraBtn').textContent='打开手机摄像头';return;
+  }
+  reader.classList.remove('hidden');html5QrCode=new Html5Qrcode('reader');
+  try{
+    await html5QrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:180}},decoded=>{
+      scanCode(decoded);
+    });
+    $('cameraBtn').textContent='关闭摄像头';
+  }catch(e){msg('无法打开摄像头，请检查浏览器权限或改用扫码枪。','bad');reader.classList.add('hidden');html5QrCode=null}
+};
+
+$('customerInput').addEventListener('input',e=>{state.customerName=e.target.value;save();$('headerCustomer').textContent=state.customerName||'尚未填写客户名称'});
+$('autoFinishToggle').addEventListener('change',e=>{state.autoFinish=e.target.checked;save();if(state.autoFinish)scheduleAutoFinish();else{clearTimeout(autoFinishTimer);$('autoCountdown').classList.remove('show')}});
+$('largeModeToggle').addEventListener('change',e=>{state.largeMode=e.target.checked;document.body.classList.toggle('large-mode',state.largeMode);save()});
+$('abnormalBtn').onclick=()=>{showAbnormalOnly=!showAbnormalOnly;$('abnormalBtn').textContent=showAbnormalOnly?'显示全部箱':'只看异常箱';render()};
+
+$('clearAllBtn').onclick=()=>{
+  if(confirm('确认清除清单和全部盘点记录吗？')){
+    localStorage.removeItem(STORAGE_KEY);state={fileName:'',sheetName:'',customerName:'',autoFinish:true,largeMode:false,templates:[],results:[],currentIndex:0,currentScans:[],extras:[],scanHistory:[]};$('fileInput').value='';$('fileInfo').textContent='支持列名：SKU、SKU码、数量、箱数；自动识别“箱数”列的合并单元格为混装箱。';render();
+  }
+};
+
+$('exportBtn').onclick=async()=>{
+  if(!state.templates.length){msg('请先上传并盘点清单。','warn');return}
+  const wb=new ExcelJS.Workbook();wb.creator='蚂蚁云仓 WMS';wb.created=new Date();
+  const sum=wb.addWorksheet('箱数汇总');
+  const planned=state.templates.length,received=state.results.filter(x=>x.received).length,normal=state.results.filter(x=>x.status==='正常').length,abnormal=state.results.filter(x=>x.status==='异常').length,unprocessed=planned-state.results.length,markedMissing=state.results.filter(x=>x.status==='未收到').length;
+  sum.addRows([
+    ['蚂蚁云仓按箱盘点报告',''],['客户名称',state.customerName||'未填写'],['客户文件',state.fileName],['导出时间',new Date().toLocaleString()],[],
+    ['项目','箱数'],['计划箱数',planned],['已盘点实收箱数',received],['正常箱数',normal],['异常箱数',abnormal],['明确未收到箱数',markedMissing],['尚未盘点/可能短少箱数',unprocessed]
+  ]);
+  sum.mergeCells('A1:B1');sum.getCell('A1').font={bold:true,size:16};sum.getRow(6).font={bold:true};sum.columns=[{width:28},{width:20}];
+  const detail=wb.addWorksheet('每箱盘点明细');
+  detail.columns=[
+    {header:'箱号',key:'boxNo',width:10},{header:'箱型',key:'type',width:12},{header:'状态',key:'status',width:12},
+    {header:'应有SKU种类',key:'expectedCount',width:14},{header:'已确认种类',key:'confirmedCount',width:14},
+    {header:'缺少SKU',key:'missing',width:28},{header:'多出/错箱SKU',key:'extras',width:28},{header:'完成时间',key:'finishedAt',width:22}
+  ];
+  const resultMap=new Map(state.results.map(x=>[x.boxNo,x]));
+  state.templates.forEach(t=>{
+    const r=resultMap.get(t.boxNo);
+    detail.addRow(r?{...r,missing:r.missing.join('、'),extras:r.extras.join('、')}:{boxNo:t.boxNo,type:t.type,status:'未盘点',expectedCount:unique(t.items.map(x=>x.code)).length,confirmedCount:0,missing:'',extras:'',finishedAt:''});
+  });
+  detail.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};detail.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF111827'}};
+  detail.eachRow((row,idx)=>{
+    if(idx===1)return;
+    const st=row.getCell(3).value;
+    const color=st==='正常'?'FFC6EFCE':st==='异常'?'FFFFC7CE':st==='未收到'?'FFFFEB9C':'FFE5E7EB';
+    row.fill={type:'pattern',pattern:'solid',fgColor:{argb:color}};
+    if(st==='异常'){row.getCell(6).font={color:{argb:'FF9C0006'},bold:true};row.getCell(7).font={color:{argb:'FF9C0006'},bold:true}}
+  });
+  detail.views=[{state:'frozen',ySplit:1}];detail.autoFilter='A1:H1';
+
+  const sku=wb.addWorksheet('SKU缺少明细');
+  sku.columns=[{header:'箱号',key:'boxNo',width:10},{header:'状态',key:'status',width:12},{header:'SKU码',key:'code',width:18},{header:'商品名称',key:'name',width:45},{header:'清单数量',key:'qty',width:12},{header:'结果',key:'result',width:12}];
+  state.results.forEach(r=>{
+    r.items.forEach(it=>{
+      const miss=r.missing.includes(clean(it.code));
+      sku.addRow({boxNo:r.boxNo,status:r.status,code:it.code,name:it.name,qty:it.qty,result:r.status==='未收到'?'整箱未收到':miss?'缺少':'已确认'});
+    });
+    r.extras.forEach(c=>sku.addRow({boxNo:r.boxNo,status:r.status,code:c,name:'不属于本箱',qty:'',result:'多出/错箱'}));
+  });
+  sku.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sku.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF111827'}};
+  sku.eachRow((row,idx)=>{
+    if(idx===1)return;
+    const res=row.getCell(6).value;
+    if(['缺少','多出/错箱','整箱未收到'].includes(res)){
+      row.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFC7CE'}};
+      row.font={color:{argb:'FF9C0006'},bold:true};
+    }
+  });
+  sku.views=[{state:'frozen',ySplit:1}];sku.autoFilter='A1:F1';
+  const buf=await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`${(state.customerName||'客户').replace(/[\\/:*?\"<>|]/g,'_')}_按箱盘点报告_${new Date().toISOString().slice(0,10)}.xlsx`);
+  msg('盘点报告已导出。','ok');
+};
+load();
+</script>
+</body>
+</html>
