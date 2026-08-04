@@ -311,6 +311,7 @@ function switchStep(step) {
 }
 
 // ---------------- SKU 基础库逻辑 ----------------
+// ---------------- SKU 基础库逻辑 ----------------
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -321,12 +322,32 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(firstSheet);
+      
+      // 改为逐行读取，自动兼容错位列和英文表头 Barcode
+      const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
       let count = 0;
       json.forEach(row => {
-        const code = String(row['SKU码'] || row['条形码'] || row['SKU Code'] || row['条码'] || '').trim();
-        const name = String(row['SKU'] || row['商品名称'] || row['名称'] || code).trim();
+        // 自动提取可能包含“条码/SKU/Barcode”的字段，如果列错位会自动搜索该行的所有值
+        const keys = Object.keys(row);
+        let name = '', code = '';
+
+        // 寻找商品名称
+        const nameKey = keys.find(k => /商品名称|名称|SKU/i.test(k));
+        if (nameKey) name = String(row[nameKey]).trim();
+
+        // 寻找条码/SKU码 (支持 Barcode/SKU码/条形码/条码)
+        const codeKey = keys.find(k => /Barcode|SKU码|条形码|条码|Code/i.test(k));
+        if (codeKey) code = String(row[codeKey]).trim();
+
+        // 容错处理：如果 Barcode 列为空，自动在整行中寻找像条码的数字串
+        if (!code) {
+          const possibleCodes = Object.values(row).map(v => String(v).trim()).filter(v => /^\d{6,20}$/.test(v));
+          if (possibleCodes.length > 0) code = possibleCodes[0];
+        }
+
+        if (!name) name = code;
+
         if (code) {
           const idx = appData.masterSkuList.findIndex(x => x.code === code);
           if (idx >= 0) {
@@ -342,36 +363,12 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
       renderMasterSku();
       showMsg(`成功导入/更新 ${count} 个店铺 SKU！`, 'ok');
     } catch(err) {
+      console.error(err);
       showMsg('解析文件失败，请确保格式正确！', 'bad');
     }
   };
   reader.readAsArrayBuffer(file);
 });
-
-function renderMasterSku() {
-  document.getElementById('masterSkuCount').textContent = `已导入 ${appData.masterSkuList.length} 个 SKU`;
-  const tbody = document.getElementById('masterSkuTable');
-  if (appData.masterSkuList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = appData.masterSkuList.map((item, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td><b>${item.code}</b></td>
-      <td>${item.name}</td>
-    </tr>
-  `).join('');
-}
-
-function clearMasterSku() {
-  if (confirm('确定要清空店铺 SKU 基础库吗？')) {
-    appData.masterSkuList = [];
-    saveData();
-    renderMasterSku();
-    showMsg('基础库已清空', 'warn');
-  }
-}
 
 // ---------------- 国内发货扫描逻辑 ----------------
 function handleShipScan() {
