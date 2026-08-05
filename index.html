@@ -28,8 +28,12 @@
     .header { background: var(--primary); color: white; padding: 18px; border-radius: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
     .header h1 { font-size: 20px; margin: 0 0 6px; }
     .header p { margin: 0; color: #9ca3af; font-size: 13px; }
-    .user-box { display: flex; align-items: center; gap: 10px; background: #1f2937; padding: 8px 12px; border-radius: 8px; flex-wrap: wrap; }
+    .user-box { display: flex; align-items: center; gap: 8px; background: #1f2937; padding: 8px 12px; border-radius: 8px; flex-wrap: wrap; }
     
+    .db-status { padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; background: #374151; color: #9ca3af; }
+    .db-status.online { background: #166534; color: #4ade80; }
+    .db-status.offline { background: #991b1b; color: #fca5a5; }
+
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     
@@ -88,10 +92,10 @@
 </head>
 <body>
 
-<!-- 登录/注册 模态弹窗 -->
+<!-- 登录模态弹窗 -->
 <div id="authModal" class="modal-overlay">
   <div class="modal">
-    <h2 id="authTitle">客户/管理员登录</h2>
+    <h2 id="authTitle">系统登录 / 注册</h2>
     <div class="form-group">
       <label>账号 (邮箱格式)</label>
       <input type="email" id="authEmail" placeholder="例如: caoxiao0721@gmail.com">
@@ -102,7 +106,7 @@
     </div>
     <div style="margin-top: 18px; display: flex; gap: 8px;">
       <button class="btn-blue" style="flex:1;" onclick="handleAuth('login')">登录系统</button>
-      <button class="btn-gray" style="flex:1;" onclick="handleAuth('register')">新客户注册</button>
+      <button class="btn-gray" style="flex:1;" onclick="handleAuth('register')">注册新账号</button>
     </div>
   </div>
 </div>
@@ -114,6 +118,8 @@
       <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 差异对照表</p>
     </div>
     <div class="user-box">
+      <!-- 数据库连接状态 -->
+      <span id="dbStatusTag" class="db-status">连接检查中...</span>
       <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
       
       <div id="adminSelector" class="hidden" style="display:inline-flex; align-items:center; gap:6px;">
@@ -167,7 +173,7 @@
     </div>
   </div>
 
-  <!-- STEP 2: 国内发货（录入/扫码/导入） -->
+  <!-- STEP 2: 国内发货 -->
   <div id="step2" class="card hidden">
     <div class="title">
       <span>步骤二：国内发货生成（支持 Excel 导入或扫码）</span>
@@ -180,7 +186,7 @@
         <input type="file" id="shipExcelImport" accept=".xlsx,.xls,.csv">
         <button class="btn-blue" onclick="importShipmentExcel()">解析并导入为发货清单</button>
       </div>
-      <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">支持表头：<b>SKU码</b>、<b>商品名称</b>、<b>发货数量</b>。导入后会自动汇总填充到下表。</p>
+      <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">支持表头：<b>SKU码</b>、<b>商品名称</b>、<b>发货数量</b>。</p>
     </div>
 
     <div class="stats-bar">
@@ -258,9 +264,9 @@
 </div>
 
 <script>
-// Firebase 初始化
+// Firebase 初始化配置（确保 4fU 大小写完全精确）
 const firebaseConfig = {
-  apiKey: "AIzaSyDWjeO8PG4fuTkAbfXVq_rsrt0I2KL1Yow",
+  apiKey: "AIzaSyDWjeO8PG4fUTkAbfXVq_rsrt0I2KL1Yow",
   authDomain: "kevin-warehouse.firebaseapp.com",
   databaseURL: "https://kevin-warehouse-default-rtdb.firebaseio.com",
   projectId: "kevin-warehouse",
@@ -270,11 +276,24 @@ const firebaseConfig = {
   measurementId: "G-256372QNRC"
 };
 
+// 填入你作为超级管理员的完整邮箱地址
 const ADMIN_EMAIL = "caoxiao0721@gmail.com";
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
+
+// 实时监测 Firebase 连接状态指示灯
+db.ref('.info/connected').on('value', snap => {
+  const statusTag = document.getElementById('dbStatusTag');
+  if (snap.val() === true) {
+    statusTag.textContent = '🟢 云端数据库：已连接';
+    statusTag.className = 'db-status online';
+  } else {
+    statusTag.textContent = '🔴 云端数据库：断开连接';
+    statusTag.className = 'db-status offline';
+  }
+});
 
 let currentUser = null;
 let targetUid = null;
@@ -406,7 +425,6 @@ function handleLogout() {
   }
 }
 
-// 核心云端保存逻辑
 function saveData(cb) {
   const activeUid = targetUid || (currentUser ? currentUser.uid : null);
   if (activeUid) {
@@ -432,7 +450,7 @@ function manualSaveMasterSku() {
 
   saveData((success) => {
     if (success) {
-      showMsg(`✅ 已成功保存 ${appData.masterSkuList.length} 个 SKU 到云端数据库！手机端即可查看。`, 'ok');
+      showMsg(`✅ 已成功保存 ${appData.masterSkuList.length} 个 SKU 到云端！`, 'ok');
     }
   });
 }
