@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>新加坡蚂蚁云仓入库系统 (Firebase 云端版)</title>
+  <title>店铺出入库盘点系统 (多客户云端隔离版)</title>
   
-  <!-- 引入 Excel 处理依赖库 -->
+  <!-- Excel 库 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- 引入 Firebase SDK (v10 模块化脚本 / 兼容版) -->
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 
   <style>
     :root {
@@ -24,10 +25,10 @@
     body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
     .app { max-width: 1100px; margin: auto; padding: 12px; }
     
-    .header { background: var(--primary); color: white; padding: 18px; border-radius: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .header { background: var(--primary); color: white; padding: 18px; border-radius: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
     .header h1 { font-size: 20px; margin: 0 0 6px; }
     .header p { margin: 0; color: #9ca3af; font-size: 13px; }
-    .db-status { font-size: 12px; padding: 4px 10px; border-radius: 20px; background: #374151; color: #e5e7eb; }
+    .user-box { display: flex; align-items: center; gap: 10px; background: #1f2937; padding: 8px 12px; border-radius: 8px; }
     
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
@@ -40,7 +41,7 @@
     .scan-area { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
     .scan-input { font-size: 20px!important; font-weight: 800; padding: 10px; width: 100%; border: 2px solid #3b82f6; border-radius: 10px; }
     
-    input[type=text], input[type=file] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    input[type=text], input[type=email], input[type=password], input[type=file] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
     button { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: white; }
@@ -72,18 +73,48 @@
     .stat-card b { font-size: 18px; display: block; }
     .stat-card span { font-size: 12px; color: var(--muted); }
 
+    /* 登录弹窗蒙版 */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 999; }
+    .modal { background: white; padding: 24px; border-radius: 12px; width: 90%; max-width: 400px; }
+    .modal h2 { margin-top: 0; font-size: 18px; }
+    .modal .form-group { margin-bottom: 12px; }
+    .modal label { font-size: 12px; font-weight: bold; color: var(--muted); display: block; margin-bottom: 4px; }
+
     .hidden { display: none !important; }
     @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
+
+<!-- 登录/注册 模态弹窗 -->
+<div id="authModal" class="modal-overlay">
+  <div class="modal">
+    <h2 id="authTitle">客户登录系统</h2>
+    <div class="form-group">
+      <label>账号 (邮箱格式)</label>
+      <input type="email" id="authEmail" placeholder="例如: client@example.com">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="authPassword" placeholder="请输入密码 (至少6位)">
+    </div>
+    <div style="margin-top: 18px; display: flex; gap: 8px;">
+      <button class="btn-blue" style="flex:1;" onclick="handleAuth('login')">登录系统</button>
+      <button class="btn-gray" style="flex:1;" onclick="handleAuth('register')">新客户注册</button>
+    </div>
+  </div>
+</div>
+
 <div class="app">
   <div class="header">
     <div>
-      <h1>店铺出入库对照盘点系统</h1>
-      <p>全自动流程：云端基础SKU库 ➔ 国内发货 ➔ 海外收货 ➔ 导出差异表</p>
+      <h1>店铺出入库盘点系统 (客户独立隔离版)</h1>
+      <p>基础SKU库 ➔ 国内发货 ➔ 海外收货 ➔ 云端同步导出</p>
     </div>
-    <div id="dbStatus" class="db-status">连接状态: 离线(本地)</div>
+    <div class="user-box">
+      <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
+      <button id="btnLogout" class="btn-red hidden" style="padding: 4px 10px; font-size: 12px;" onclick="handleLogout()">退出登录</button>
+    </div>
   </div>
 
   <div id="msgBox" class="message"></div>
@@ -100,10 +131,10 @@
       <span>步骤一：一次性上传店铺所有 SKU 与对应码</span>
       <span class="badge badge-gray" id="masterSkuCount">已导入 0 个 SKU</span>
     </div>
-    <p style="font-size: 13px; color: var(--muted);">上传包含店铺完整 SKU 列表的 Excel 格式文件（需包含表头：<b>SKU</b> / <b>商品名称</b> 和 <b>SKU码</b> / <b>条形码</b>）。</p>
+    <p style="font-size: 13px; color: var(--muted);">上传包含店铺完整 SKU 列表的 Excel 文件（支持表头：SKU/商品名称/名称，Barcode/SKU码/条形码/条码）。</p>
     <div class="grid2" style="margin-bottom: 12px;">
       <input type="file" id="skuMasterFile" accept=".xlsx,.xls,.csv">
-      <button class="btn-red" onclick="clearMasterSku()">清空基础商品库</button>
+      <button class="btn-red" onclick="clearMasterSku()">清空本店铺商品库</button>
     </div>
 
     <div class="table-wrap">
@@ -201,7 +232,7 @@
 
 <script>
 // ==========================================
-// 1. Firebase 配置项 (以后把你的配置贴在这里)
+// 1. Firebase 初始化与配置
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyDWjeO8PG4fUTkAbfXVq_rsrt0I2KL1Yow",
@@ -214,24 +245,11 @@ const firebaseConfig = {
   measurementId: "G-256372QNRC"
 };
 
-let db = null;
-let isFirebaseOnline = false;
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const auth = firebase.auth();
 
-// 初始化 Firebase
-if (firebaseConfig.databaseURL) {
-  try {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    isFirebaseOnline = true;
-    document.getElementById('dbStatus').textContent = "连接状态: 云端数据库已连接";
-    document.getElementById('dbStatus').style.background = "#16a34a";
-  } catch(e) {
-    console.error("Firebase 初始化失败", e);
-  }
-}
-
-// 全局应用数据
-const LOCAL_STORAGE_KEY = 'WMS_STORE_DATA_V4';
+let currentUser = null;
 let appData = {
   masterSkuList: [],
   currentShipment: {},
@@ -239,17 +257,16 @@ let appData = {
   activeShipmentId: null
 };
 
-// 数据持久化（云端 + 本地备用）
-function saveData() {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
-  if (isFirebaseOnline && db) {
-    db.ref('wms_data').set(appData).catch(err => console.error("同步到Firebase失败", err));
-  }
-}
-
-function loadData() {
-  if (isFirebaseOnline && db) {
-    db.ref('wms_data').on('value', snapshot => {
+// 监听登录状态变化
+auth.onAuthStateChanged(user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('authModal').classList.add('hidden');
+    document.getElementById('userStatusText').textContent = `当前账号: ${user.email}`;
+    document.getElementById('btnLogout').classList.remove('hidden');
+    
+    // 监听当前用户的独立数据库节点: users/UID
+    db.ref(`users/${user.uid}/wms_data`).on('value', snapshot => {
       const val = snapshot.val();
       if (val) {
         appData = val;
@@ -260,16 +277,52 @@ function loadData() {
         renderShipTable();
         updateShipmentSelect();
         if (appData.activeShipmentId) renderReceiveTable();
+      } else {
+        appData = { masterSkuList: [], currentShipment: {}, shipmentHistory: [], activeShipmentId: null };
+        renderMasterSku();
+        renderShipTable();
+        updateShipmentSelect();
       }
     });
   } else {
-    const local = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (local) {
-      try { appData = JSON.parse(local); } catch(e) {}
-    }
-    renderMasterSku();
-    renderShipTable();
-    updateShipmentSelect();
+    currentUser = null;
+    document.getElementById('authModal').classList.remove('hidden');
+    document.getElementById('userStatusText').textContent = '未登录';
+    document.getElementById('btnLogout').classList.add('hidden');
+  }
+});
+
+// 用户登录 / 注册 处理
+function handleAuth(type) {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value.trim();
+
+  if (!email || !password) {
+    alert('请输入完整的邮箱和密码！');
+    return;
+  }
+
+  if (type === 'login') {
+    auth.signInWithEmailAndPassword(email, password)
+      .catch(err => alert('登录失败: ' + err.message));
+  } else {
+    auth.createUserWithEmailAndPassword(email, password)
+      .then(() => alert('注册成功并已自动登录！'))
+      .catch(err => alert('注册失败: ' + err.message));
+  }
+}
+
+function handleLogout() {
+  if (confirm('确定要退出登录吗？')) {
+    auth.signOut();
+  }
+}
+
+// 写入当前客户的独立数据库空间
+function saveData() {
+  if (currentUser && db) {
+    db.ref(`users/${currentUser.uid}/wms_data`).set(appData)
+      .catch(err => console.error("同步失败", err));
   }
 }
 
@@ -312,7 +365,6 @@ function switchStep(step) {
 }
 
 // ---------------- SKU 基础库逻辑 ----------------
-// ---------------- SKU 基础库逻辑 ----------------
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -323,25 +375,19 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      
-      // 改为逐行读取，自动兼容错位列和英文表头 Barcode
       const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
       let count = 0;
       json.forEach(row => {
-        // 自动提取可能包含“条码/SKU/Barcode”的字段，如果列错位会自动搜索该行的所有值
         const keys = Object.keys(row);
         let name = '', code = '';
 
-        // 寻找商品名称
         const nameKey = keys.find(k => /商品名称|名称|SKU/i.test(k));
         if (nameKey) name = String(row[nameKey]).trim();
 
-        // 寻找条码/SKU码 (支持 Barcode/SKU码/条形码/条码)
         const codeKey = keys.find(k => /Barcode|SKU码|条形码|条码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
 
-        // 容错处理：如果 Barcode 列为空，自动在整行中寻找像条码的数字串
         if (!code) {
           const possibleCodes = Object.values(row).map(v => String(v).trim()).filter(v => /^\d{6,20}$/.test(v));
           if (possibleCodes.length > 0) code = possibleCodes[0];
@@ -364,12 +410,36 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
       renderMasterSku();
       showMsg(`成功导入/更新 ${count} 个店铺 SKU！`, 'ok');
     } catch(err) {
-      console.error(err);
       showMsg('解析文件失败，请确保格式正确！', 'bad');
     }
   };
   reader.readAsArrayBuffer(file);
 });
+
+function renderMasterSku() {
+  document.getElementById('masterSkuCount').textContent = `已导入 ${appData.masterSkuList.length} 个 SKU`;
+  const tbody = document.getElementById('masterSkuTable');
+  if (appData.masterSkuList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = appData.masterSkuList.map((item, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td><b>${item.code}</b></td>
+      <td>${item.name}</td>
+    </tr>
+  `).join('');
+}
+
+function clearMasterSku() {
+  if (confirm('确定要清空本店铺的 SKU 基础库吗？')) {
+    appData.masterSkuList = [];
+    saveData();
+    renderMasterSku();
+    showMsg('基础库已清空', 'warn');
+  }
+}
 
 // ---------------- 国内发货扫描逻辑 ----------------
 function handleShipScan() {
@@ -663,9 +733,6 @@ async function exportDiffReport() {
   updateShipmentSelect();
   showMsg('差异对照表导出成功！', 'ok');
 }
-
-// 页面加载启动
-loadData();
 </script>
 </body>
 </html>
