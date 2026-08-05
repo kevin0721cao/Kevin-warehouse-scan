@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>店铺出入库盘点系统 (管理员+客户隔离版)</title>
+  <title>店铺出入库盘点系统 (超级管理员版)</title>
   
   <!-- Excel 库 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
@@ -143,10 +143,10 @@
   <!-- STEP 1: SKU基础库导入 -->
   <div id="step1" class="card">
     <div class="title">
-      <span>步骤一：上传店铺所有 SKU 与对应码</span>
+      <span>步骤一：上传店铺 SKU 基础库</span>
       <span class="badge badge-gray" id="masterSkuCount">已导入 0 个 SKU</span>
     </div>
-    <p style="font-size: 13px; color: var(--muted);">上传包含店铺完整 SKU 列表的 Excel 文件（支持表头：SKU/商品名称/名称，Barcode/SKU码/条形码/条码）。</p>
+    <p style="font-size: 13px; color: var(--muted);">上传包含店铺完整商品的 Excel 文件（表头包含：<b>SKU码</b>、<b>商品名称</b> 即可）。</p>
     <div class="grid2" style="margin-bottom: 12px;">
       <input type="file" id="skuMasterFile" accept=".xlsx,.xls,.csv">
       <button class="btn-red" onclick="clearMasterSku()">清空本店铺商品库</button>
@@ -155,7 +155,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>序号</th><th>SKU 码 / 条码</th><th>商品名称 / SKU</th></tr>
+          <tr><th>序号</th><th>SKU码</th><th>商品名称</th></tr>
         </thead>
         <tbody id="masterSkuTable">
           <tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>
@@ -171,14 +171,14 @@
       <span class="badge badge-blue" id="shipStatusBadge">待生成发货单</span>
     </div>
 
-    <!-- 增加：Excel发货单直接导入区域 -->
+    <!-- Excel发货单直接导入区域 -->
     <div class="import-box">
-      <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--blue);">📄 国内没扫码？直接上传国内给出的发货 Excel 单：</div>
+      <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--blue);">📄 直接上传国内给出的发货 Excel 单：</div>
       <div class="grid2">
         <input type="file" id="shipExcelImport" accept=".xlsx,.xls,.csv">
         <button class="btn-blue" onclick="importShipmentExcel()">解析并导入为发货清单</button>
       </div>
-      <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">支持表头包含：SKU码/条码、商品名称、数量/发货数量。导入后会自动汇总填充到下表。</p>
+      <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">支持表头：<b>SKU码</b>、<b>商品名称</b>、<b>发货数量</b>。导入后会自动汇总填充到下表。</p>
     </div>
 
     <div class="stats-bar">
@@ -260,7 +260,7 @@
 // 1. Firebase 初始化与超级管理员设置
 // ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyDWjeO8PG4fuTkAbfXVq_rsrt0I2KL1Yow",
+  apiKey: "AIzaSyDWjeO8PG4fUTkAbfXVq_rsrt0I2KL1Yow",
   authDomain: "kevin-warehouse.firebaseapp.com",
   databaseURL: "https://kevin-warehouse-default-rtdb.firebaseio.com",
   projectId: "kevin-warehouse",
@@ -449,7 +449,7 @@ function switchStep(step) {
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
-// SKU 基础库
+// SKU 基础库导入
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -467,14 +467,16 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
         const keys = Object.keys(row);
         let name = '', code = '';
 
-        const nameKey = keys.find(k => /商品名称|名称|SKU/i.test(k));
+        // 智能获取商品名称
+        const nameKey = keys.find(k => /商品名称|名称/i.test(k));
         if (nameKey) name = String(row[nameKey]).trim();
 
-        const codeKey = keys.find(k => /Barcode|SKU码|条形码|条码|Code/i.test(k));
+        // 智能获取 SKU码
+        const codeKey = keys.find(k => /SKU码|SKU编号|SKU|Barcode|条形码|条码|编码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
 
         if (!code) {
-          const possibleCodes = Object.values(row).map(v => String(v).trim()).filter(v => /^\d{6,20}$/.test(v));
+          const possibleCodes = Object.values(row).map(v => String(v).trim()).filter(v => /^[A-Za-z0-9_-]{4,30}$/.test(v));
           if (possibleCodes.length > 0) code = possibleCodes[0];
         }
 
@@ -526,9 +528,7 @@ function clearMasterSku() {
   }
 }
 
-// ------------------------------------------
-// 新增：导入国内给出的发货单 Excel
-// ------------------------------------------
+// 导入国内给出的发货单 Excel
 function importShipmentExcel() {
   const fileInput = document.getElementById('shipExcelImport');
   const file = fileInput.files[0];
@@ -550,12 +550,12 @@ function importShipmentExcel() {
         const keys = Object.keys(row);
         let code = '', qty = 1;
 
-        // 匹配 SKU码/条码
-        const codeKey = keys.find(k => /Barcode|SKU码|条形码|条码|SKU/i.test(k));
+        // 智能读取 SKU码
+        const codeKey = keys.find(k => /SKU码|SKU编号|SKU|Barcode|条形码|条码|编码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
 
-        // 匹配 数量/发货数量
-        const qtyKey = keys.find(k => /数量|件数|发货量|qty/i.test(k));
+        // 智能读取 数量
+        const qtyKey = keys.find(k => /发货数量|数量|件数|qty/i.test(k));
         if (qtyKey && !isNaN(parseInt(row[qtyKey]))) {
           qty = parseInt(row[qtyKey]);
         }
@@ -820,7 +820,7 @@ async function exportDiffReport() {
   const ws = wb.addWorksheet('出入库对照盘点单');
 
   ws.columns = [
-    { header: 'SKU码 / 条码', key: 'code', width: 22 },
+    { header: 'SKU码', key: 'code', width: 22 },
     { header: '商品名称', key: 'name', width: 35 },
     { header: '国内发货数量', key: 'plan', width: 15 },
     { header: '海外实收数量', key: 'rec', width: 15 },
