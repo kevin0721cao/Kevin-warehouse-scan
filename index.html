@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>店铺出入库盘点系统 (多客户云端隔离版)</title>
+  <title>店铺出入库盘点系统 (管理员+客户隔离版)</title>
   
   <!-- Excel 库 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
@@ -28,7 +28,7 @@
     .header { background: var(--primary); color: white; padding: 18px; border-radius: 14px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
     .header h1 { font-size: 20px; margin: 0 0 6px; }
     .header p { margin: 0; color: #9ca3af; font-size: 13px; }
-    .user-box { display: flex; align-items: center; gap: 10px; background: #1f2937; padding: 8px 12px; border-radius: 8px; }
+    .user-box { display: flex; align-items: center; gap: 10px; background: #1f2937; padding: 8px 12px; border-radius: 8px; flex-wrap: wrap; }
     
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
@@ -73,6 +73,8 @@
     .stat-card b { font-size: 18px; display: block; }
     .stat-card span { font-size: 12px; color: var(--muted); }
 
+    .admin-bar { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+
     /* 登录弹窗蒙版 */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 999; }
     .modal { background: white; padding: 24px; border-radius: 12px; width: 90%; max-width: 400px; }
@@ -89,7 +91,7 @@
 <!-- 登录/注册 模态弹窗 -->
 <div id="authModal" class="modal-overlay">
   <div class="modal">
-    <h2 id="authTitle">客户登录系统</h2>
+    <h2 id="authTitle">客户/管理员登录</h2>
     <div class="form-group">
       <label>账号 (邮箱格式)</label>
       <input type="email" id="authEmail" placeholder="例如: client@example.com">
@@ -108,13 +110,26 @@
 <div class="app">
   <div class="header">
     <div>
-      <h1>店铺出入库盘点系统 (客户独立隔离版)</h1>
-      <p>基础SKU库 ➔ 国内发货 ➔ 海外收货 ➔ 云端同步导出</p>
+      <h1>店铺出入库盘点系统 (超级管理员版)</h1>
+      <p>基础SKU库 ➔ 国内发货 ➔ 海外收货 ➔ 云端隔离与全局视角</p>
     </div>
     <div class="user-box">
       <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
-      <button id="btnLogout" class="btn-red hidden" style="padding: 4px 10px; font-size: 12px;" onclick="handleLogout()">退出登录</button>
+      
+      <!-- 管理员特有下拉菜单 -->
+      <div id="adminSelector" class="hidden" style="display:inline-flex; align-items:center; gap:6px;">
+        <span style="font-size:12px; color:#fbcfe8; font-weight:bold;">[管理员切换]:</span>
+        <select id="clientSelect" onchange="switchTargetUser()" style="padding:4px 8px; border-radius:6px; font-size:12px; background:white;">
+          <option value="">我的个人数据</option>
+        </select>
+      </div>
+
+      <button id="btnLogout" class="btn-red hidden" style="padding: 4px 10px; font-size: 12px;" onclick="handleLogout()">退出</button>
     </div>
+  </div>
+
+  <div id="adminNotice" class="admin-bar hidden">
+    <span>⚠️ 超级管理员视角：您当前正在查看/操作客户 [<b id="currentClientEmail">--</b>] 的数据</span>
   </div>
 
   <div id="msgBox" class="message"></div>
@@ -232,10 +247,10 @@
 
 <script>
 // ==========================================
-// 1. Firebase 初始化与配置
+// 1. Firebase 初始化与超级管理员设置
 // ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyDWjeO8PG4fuTkAbfXVq_rsrt0I2KL1Yow",
+  apiKey: "AIzaSyDWjeO8PG4fUTkAbfXVq_rsrt0I2KL1Yow",
   authDomain: "kevin-warehouse.firebaseapp.com",
   databaseURL: "https://kevin-warehouse-default-rtdb.firebaseio.com",
   projectId: "kevin-warehouse",
@@ -245,11 +260,18 @@ const firebaseConfig = {
   measurementId: "G-256372QNRC"
 };
 
+// 指定管理员主邮箱
+const ADMIN_EMAIL = "caoxiao0721@gmail.com";
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 
 let currentUser = null;
+let targetUid = null; // 当前正在查看的客户 UID
+let dataListener = null;
+let allUsersMap = {}; // 管理员获取的所有用户列表
+
 let appData = {
   masterSkuList: [],
   currentShipment: {},
@@ -257,42 +279,103 @@ let appData = {
   activeShipmentId: null
 };
 
-// 监听登录状态变化
+// 监听登录状态
 auth.onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
     document.getElementById('authModal').classList.add('hidden');
-    document.getElementById('userStatusText').textContent = `当前账号: ${user.email}`;
+    document.getElementById('userStatusText').textContent = `登录: ${user.email}`;
     document.getElementById('btnLogout').classList.remove('hidden');
-    
-    // 监听当前用户的独立数据库节点: users/UID
-    db.ref(`users/${user.uid}/wms_data`).on('value', snapshot => {
-      const val = snapshot.val();
-      if (val) {
-        appData = val;
-        if (!appData.masterSkuList) appData.masterSkuList = [];
-        if (!appData.currentShipment) appData.currentShipment = {};
-        if (!appData.shipmentHistory) appData.shipmentHistory = [];
-        renderMasterSku();
-        renderShipTable();
-        updateShipmentSelect();
-        if (appData.activeShipmentId) renderReceiveTable();
-      } else {
-        appData = { masterSkuList: [], currentShipment: {}, shipmentHistory: [], activeShipmentId: null };
-        renderMasterSku();
-        renderShipTable();
-        updateShipmentSelect();
-      }
+
+    // 将用户基本信息写入系统的 users 节点
+    db.ref(`users/${user.uid}/profile`).update({
+      email: user.email,
+      lastLogin: new Date().toLocaleString()
     });
+
+    // 判断是否是管理员
+    if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      document.getElementById('adminSelector').classList.remove('hidden');
+      loadAllClientsList();
+    } else {
+      document.getElementById('adminSelector').classList.add('hidden');
+      document.getElementById('adminNotice').classList.add('hidden');
+    }
+
+    // 默认加载自己的数据
+    bindDataListener(user.uid);
+
   } else {
     currentUser = null;
+    targetUid = null;
     document.getElementById('authModal').classList.remove('hidden');
     document.getElementById('userStatusText').textContent = '未登录';
     document.getElementById('btnLogout').classList.add('hidden');
+    document.getElementById('adminSelector').classList.add('hidden');
+    document.getElementById('adminNotice').classList.add('hidden');
   }
 });
 
-// 用户登录 / 注册 处理
+// 管理员加载全量客户列表
+function loadAllClientsList() {
+  db.ref('users').on('value', snapshot => {
+    const users = snapshot.val() || {};
+    allUsersMap = users;
+    
+    const select = document.getElementById('clientSelect');
+    select.innerHTML = '<option value="">我的个人数据</option>';
+
+    Object.keys(users).forEach(uid => {
+      if (uid !== currentUser.uid) {
+        const email = (users[uid].profile && users[uid].profile.email) ? users[uid].profile.email : uid;
+        select.innerHTML += `<option value="${uid}">${email}</option>`;
+      }
+    });
+  });
+}
+
+// 切换选中的客户
+function switchTargetUser() {
+  const selectedUid = document.getElementById('clientSelect').value;
+  const notice = document.getElementById('adminNotice');
+  const clientEmailSpan = document.getElementById('currentClientEmail');
+
+  if (selectedUid) {
+    targetUid = selectedUid;
+    const clientEmail = (allUsersMap[selectedUid] && allUsersMap[selectedUid].profile) ? allUsersMap[selectedUid].profile.email : selectedUid;
+    clientEmailSpan.textContent = clientEmail;
+    notice.classList.remove('hidden');
+  } else {
+    targetUid = currentUser.uid;
+    notice.classList.add('hidden');
+  }
+
+  bindDataListener(targetUid);
+}
+
+// 绑定对应 UID 的数据库监听
+function bindDataListener(uid) {
+  targetUid = uid;
+  if (dataListener) dataListener.off();
+
+  dataListener = db.ref(`users/${uid}/wms_data`);
+  dataListener.on('value', snapshot => {
+    const val = snapshot.val();
+    if (val) {
+      appData = val;
+      if (!appData.masterSkuList) appData.masterSkuList = [];
+      if (!appData.currentShipment) appData.currentShipment = {};
+      if (!appData.shipmentHistory) appData.shipmentHistory = [];
+    } else {
+      appData = { masterSkuList: [], currentShipment: {}, shipmentHistory: [], activeShipmentId: null };
+    }
+    renderMasterSku();
+    renderShipTable();
+    updateShipmentSelect();
+    if (appData.activeShipmentId) renderReceiveTable();
+  });
+}
+
 function handleAuth(type) {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value.trim();
@@ -318,10 +401,10 @@ function handleLogout() {
   }
 }
 
-// 写入当前客户的独立数据库空间
+// 保存数据至目标账号节点
 function saveData() {
-  if (currentUser && db) {
-    db.ref(`users/${currentUser.uid}/wms_data`).set(appData)
+  if (targetUid && db) {
+    db.ref(`users/${targetUid}/wms_data`).set(appData)
       .catch(err => console.error("同步失败", err));
   }
 }
