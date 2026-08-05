@@ -94,7 +94,7 @@
     <h2 id="authTitle">客户/管理员登录</h2>
     <div class="form-group">
       <label>账号 (邮箱格式)</label>
-      <input type="email" id="authEmail" placeholder="例如: client@example.com">
+      <input type="email" id="authEmail" placeholder="例如: caoxiao0721@gmail.com">
     </div>
     <div class="form-group">
       <label>密码</label>
@@ -268,9 +268,9 @@ const db = firebase.database();
 const auth = firebase.auth();
 
 let currentUser = null;
-let targetUid = null; // 当前正在查看的客户 UID
+let targetUid = null;
 let dataListener = null;
-let allUsersMap = {}; // 管理员获取的所有用户列表
+let allUsersMap = {};
 
 let appData = {
   masterSkuList: [],
@@ -287,13 +287,11 @@ auth.onAuthStateChanged(user => {
     document.getElementById('userStatusText').textContent = `登录: ${user.email}`;
     document.getElementById('btnLogout').classList.remove('hidden');
 
-    // 将用户基本信息写入系统的 users 节点
     db.ref(`users/${user.uid}/profile`).update({
       email: user.email,
       lastLogin: new Date().toLocaleString()
     });
 
-    // 判断是否是管理员
     if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
       document.getElementById('adminSelector').classList.remove('hidden');
       loadAllClientsList();
@@ -302,7 +300,6 @@ auth.onAuthStateChanged(user => {
       document.getElementById('adminNotice').classList.add('hidden');
     }
 
-    // 默认加载自己的数据
     bindDataListener(user.uid);
 
   } else {
@@ -316,7 +313,6 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-// 管理员加载全量客户列表
 function loadAllClientsList() {
   db.ref('users').on('value', snapshot => {
     const users = snapshot.val() || {};
@@ -334,7 +330,6 @@ function loadAllClientsList() {
   });
 }
 
-// 切换选中的客户
 function switchTargetUser() {
   const selectedUid = document.getElementById('clientSelect').value;
   const notice = document.getElementById('adminNotice');
@@ -353,7 +348,6 @@ function switchTargetUser() {
   bindDataListener(targetUid);
 }
 
-// 绑定对应 UID 的数据库监听
 function bindDataListener(uid) {
   targetUid = uid;
   if (dataListener) dataListener.off();
@@ -401,7 +395,6 @@ function handleLogout() {
   }
 }
 
-// 保存数据至目标账号节点
 function saveData() {
   if (targetUid && db) {
     db.ref(`users/${targetUid}/wms_data`).set(appData)
@@ -447,7 +440,7 @@ function switchStep(step) {
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
-// ---------------- SKU 基础库逻辑 ----------------
+// SKU 基础库
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -524,7 +517,7 @@ function clearMasterSku() {
   }
 }
 
-// ---------------- 国内发货扫描逻辑 ----------------
+// 国内发货扫描
 function handleShipScan() {
   const input = document.getElementById('shipScanInput');
   const code = input.value.trim();
@@ -633,7 +626,7 @@ function submitShipment() {
   loadShipmentForReceive();
 }
 
-// ---------------- 海外收货盘点逻辑 ----------------
+// 海外收货盘点
 function updateShipmentSelect() {
   const select = document.getElementById('shipmentSelect');
   select.innerHTML = '<option value="">-- 请选择发货批次 --</option>' + 
@@ -759,7 +752,7 @@ function renderReceiveTable() {
   document.getElementById('receiveTable').innerHTML = html || `<tr><td colspan="6" style="text-align:center; color:var(--muted);">清单无数据</td></tr>`;
 }
 
-// ---------------- 导出 Excel 对照单 ----------------
+// 导出 Excel 对照单
 async function exportDiffReport() {
   const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
   if (!shipment) return;
