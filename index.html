@@ -75,7 +75,6 @@
 
     .admin-bar { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
 
-    /* 登录弹窗蒙版 */
     .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 999; }
     .modal { background: white; padding: 24px; border-radius: 12px; width: 90%; max-width: 400px; }
     .modal h2 { margin-top: 0; font-size: 18px; }
@@ -118,7 +117,7 @@
       <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
       
       <div id="adminSelector" class="hidden" style="display:inline-flex; align-items:center; gap:6px;">
-        <span style="font-size:12px; color:#fbcfe8; font-weight:bold;">[管理员切换]:</span>
+        <span style="font-size:12px; color:#fbcfe8; font-weight:bold;">[视角切换]:</span>
         <select id="clientSelect" onchange="switchTargetUser()" style="padding:4px 8px; border-radius:6px; font-size:12px; background:white;">
           <option value="">我的个人数据</option>
         </select>
@@ -146,10 +145,14 @@
       <span>步骤一：上传店铺 SKU 基础库</span>
       <span class="badge badge-gray" id="masterSkuCount">已导入 0 个 SKU</span>
     </div>
-    <p style="font-size: 13px; color: var(--muted);">上传包含店铺完整商品的 Excel 文件（表头包含：<b>SKU码</b>、<b>商品名称</b> 即可）。</p>
+    <p style="font-size: 13px; color: var(--muted);">选择包含店铺商品的 Excel 文件（表头包含：<b>SKU码</b>、<b>商品名称</b>），读取后点击右侧按钮保存同步。</p>
+    
     <div class="grid2" style="margin-bottom: 12px;">
       <input type="file" id="skuMasterFile" accept=".xlsx,.xls,.csv">
-      <button class="btn-red" onclick="clearMasterSku()">清空本店铺商品库</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-green" style="flex:1;" onclick="manualSaveMasterSku()">💾 保存/同步商品库至云端</button>
+        <button class="btn-red" onclick="clearMasterSku()">清空商品库</button>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -171,7 +174,6 @@
       <span class="badge badge-blue" id="shipStatusBadge">待生成发货单</span>
     </div>
 
-    <!-- Excel发货单直接导入区域 -->
     <div class="import-box">
       <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--blue);">📄 直接上传国内给出的发货 Excel 单：</div>
       <div class="grid2">
@@ -256,11 +258,9 @@
 </div>
 
 <script>
-// ==========================================
-// 1. Firebase 初始化与超级管理员设置
-// ==========================================
+// Firebase 初始化
 const firebaseConfig = {
-  apiKey: "AIzaSyDWjeO8PG4fuTkAbfXVq_rsrt0I2KL1Yow",
+  apiKey: "AIzaSyDWjeO8PG4fUTkAbfXVq_rsrt0I2KL1Yow",
   authDomain: "kevin-warehouse.firebaseapp.com",
   databaseURL: "https://kevin-warehouse-default-rtdb.firebaseio.com",
   projectId: "kevin-warehouse",
@@ -278,7 +278,7 @@ const auth = firebase.auth();
 
 let currentUser = null;
 let targetUid = null;
-let dataListener = null;
+let dataRef = null;
 let allUsersMap = {};
 
 let appData = {
@@ -292,6 +292,8 @@ let appData = {
 auth.onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
+    targetUid = user.uid;
+
     document.getElementById('authModal').classList.add('hidden');
     document.getElementById('userStatusText').textContent = `登录: ${user.email}`;
     document.getElementById('btnLogout').classList.remove('hidden');
@@ -309,11 +311,12 @@ auth.onAuthStateChanged(user => {
       document.getElementById('adminNotice').classList.add('hidden');
     }
 
-    bindDataListener(user.uid);
+    bindDataListener(targetUid);
 
   } else {
     currentUser = null;
     targetUid = null;
+    if (dataRef) dataRef.off();
     document.getElementById('authModal').classList.remove('hidden');
     document.getElementById('userStatusText').textContent = '未登录';
     document.getElementById('btnLogout').classList.add('hidden');
@@ -358,17 +361,16 @@ function switchTargetUser() {
 }
 
 function bindDataListener(uid) {
-  targetUid = uid;
-  if (dataListener) dataListener.off();
+  if (dataRef) dataRef.off();
 
-  dataListener = db.ref(`users/${uid}/wms_data`);
-  dataListener.on('value', snapshot => {
+  dataRef = db.ref(`users/${uid}/wms_data`);
+  dataRef.on('value', snapshot => {
     const val = snapshot.val();
     if (val) {
-      appData = val;
-      if (!appData.masterSkuList) appData.masterSkuList = [];
-      if (!appData.currentShipment) appData.currentShipment = {};
-      if (!appData.shipmentHistory) appData.shipmentHistory = [];
+      appData.masterSkuList = val.masterSkuList || [];
+      appData.currentShipment = val.currentShipment || {};
+      appData.shipmentHistory = val.shipmentHistory || [];
+      appData.activeShipmentId = val.activeShipmentId || null;
     } else {
       appData = { masterSkuList: [], currentShipment: {}, shipmentHistory: [], activeShipmentId: null };
     }
@@ -404,11 +406,35 @@ function handleLogout() {
   }
 }
 
-function saveData() {
-  if (targetUid && db) {
-    db.ref(`users/${targetUid}/wms_data`).set(appData)
-      .catch(err => console.error("同步失败", err));
+// 核心云端保存逻辑
+function saveData(cb) {
+  const activeUid = targetUid || (currentUser ? currentUser.uid : null);
+  if (activeUid) {
+    db.ref(`users/${activeUid}/wms_data`).set(appData)
+      .then(() => {
+        console.log('同步云端成功');
+        if (cb) cb(true);
+      })
+      .catch(err => {
+        showMsg('云端同步失败: ' + err.message, 'bad');
+        if (cb) cb(false);
+      });
+  } else {
+    showMsg('尚未登录，无法更新云端数据库！', 'bad');
   }
+}
+
+function manualSaveMasterSku() {
+  if (!appData.masterSkuList || appData.masterSkuList.length === 0) {
+    showMsg('当前列表无商品数据，请先选择 Excel 文件！', 'warn');
+    return;
+  }
+
+  saveData((success) => {
+    if (success) {
+      showMsg(`✅ 已成功保存 ${appData.masterSkuList.length} 个 SKU 到云端数据库！手机端即可查看。`, 'ok');
+    }
+  });
 }
 
 function showMsg(text, type = 'ok') {
@@ -416,7 +442,7 @@ function showMsg(text, type = 'ok') {
   box.textContent = text;
   box.className = `message show ${type}`;
   clearTimeout(box.timer);
-  box.timer = setTimeout(() => box.className = 'message', 3500);
+  box.timer = setTimeout(() => box.className = 'message', 4000);
 }
 
 function playAudioNotice(type = 'ok') {
@@ -449,7 +475,7 @@ function switchStep(step) {
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
-// SKU 基础库导入
+// SKU 基础库解析
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -467,11 +493,9 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
         const keys = Object.keys(row);
         let name = '', code = '';
 
-        // 智能获取商品名称
         const nameKey = keys.find(k => /商品名称|名称/i.test(k));
         if (nameKey) name = String(row[nameKey]).trim();
 
-        // 智能获取 SKU码
         const codeKey = keys.find(k => /SKU码|SKU编号|SKU|Barcode|条形码|条码|编码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
 
@@ -493,9 +517,8 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
         }
       });
 
-      saveData();
       renderMasterSku();
-      showMsg(`成功导入/更新 ${count} 个店铺 SKU！`, 'ok');
+      showMsg(`文件解析完成！读取到 ${count} 个 SKU，请点击右侧【💾 保存/同步商品库至云端】按钮更新云端！`, 'warn');
     } catch(err) {
       showMsg('解析文件失败，请确保格式正确！', 'bad');
     }
@@ -522,13 +545,14 @@ function renderMasterSku() {
 function clearMasterSku() {
   if (confirm('确定要清空本店铺的 SKU 基础库吗？')) {
     appData.masterSkuList = [];
-    saveData();
-    renderMasterSku();
-    showMsg('基础库已清空', 'warn');
+    saveData(() => {
+      renderMasterSku();
+      showMsg('基础库已清空并同步到云端！', 'warn');
+    });
   }
 }
 
-// 导入国内给出的发货单 Excel
+// 导入国内发货单
 function importShipmentExcel() {
   const fileInput = document.getElementById('shipExcelImport');
   const file = fileInput.files[0];
@@ -550,11 +574,9 @@ function importShipmentExcel() {
         const keys = Object.keys(row);
         let code = '', qty = 1;
 
-        // 智能读取 SKU码
         const codeKey = keys.find(k => /SKU码|SKU编号|SKU|Barcode|条形码|条码|编码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
 
-        // 智能读取 数量
         const qtyKey = keys.find(k => /发货数量|数量|件数|qty/i.test(k));
         if (qtyKey && !isNaN(parseInt(row[qtyKey]))) {
           qty = parseInt(row[qtyKey]);
