@@ -41,7 +41,7 @@
     .scan-area { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
     .scan-input { font-size: 20px!important; font-weight: 800; padding: 10px; width: 100%; border: 2px solid #3b82f6; border-radius: 10px; }
     
-    input[type=text], input[type=email], input[type=password], input[type=file] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    input[type=text], input[type=email], input[type=password], input[type=file], select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
     button { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: white; }
@@ -83,6 +83,7 @@
     .modal label { font-size: 12px; font-weight: bold; color: var(--muted); display: block; margin-bottom: 4px; }
 
     .hidden { display: none !important; }
+    .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
     @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
@@ -111,12 +112,11 @@
   <div class="header">
     <div>
       <h1>店铺出入库盘点系统 (超级管理员版)</h1>
-      <p>基础SKU库 ➔ 国内发货 ➔ 海外收货 ➔ 云端隔离与全局视角</p>
+      <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 差异对照表</p>
     </div>
     <div class="user-box">
       <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
       
-      <!-- 管理员特有下拉菜单 -->
       <div id="adminSelector" class="hidden" style="display:inline-flex; align-items:center; gap:6px;">
         <span style="font-size:12px; color:#fbcfe8; font-weight:bold;">[管理员切换]:</span>
         <select id="clientSelect" onchange="switchTargetUser()" style="padding:4px 8px; border-radius:6px; font-size:12px; background:white;">
@@ -136,14 +136,14 @@
 
   <div class="step-tabs">
     <button class="tab-btn active" id="tab1" onclick="switchStep(1)">1. 店铺 SKU 基础库</button>
-    <button class="tab-btn" id="tab2" onclick="switchStep(2)">2. 国内发货扫描</button>
+    <button class="tab-btn" id="tab2" onclick="switchStep(2)">2. 国内发货(扫码/导入)</button>
     <button class="tab-btn" id="tab3" onclick="switchStep(3)">3. 海外收货盘点</button>
   </div>
 
   <!-- STEP 1: SKU基础库导入 -->
   <div id="step1" class="card">
     <div class="title">
-      <span>步骤一：一次性上传店铺所有 SKU 与对应码</span>
+      <span>步骤一：上传店铺所有 SKU 与对应码</span>
       <span class="badge badge-gray" id="masterSkuCount">已导入 0 个 SKU</span>
     </div>
     <p style="font-size: 13px; color: var(--muted);">上传包含店铺完整 SKU 列表的 Excel 文件（支持表头：SKU/商品名称/名称，Barcode/SKU码/条形码/条码）。</p>
@@ -164,11 +164,21 @@
     </div>
   </div>
 
-  <!-- STEP 2: 国内扫描发货 -->
+  <!-- STEP 2: 国内发货（录入/扫码/导入） -->
   <div id="step2" class="card hidden">
     <div class="title">
-      <span>步骤二：国内发货扫描打包</span>
-      <span class="badge badge-blue" id="shipStatusBadge">未发货</span>
+      <span>步骤二：国内发货生成（支持 Excel 导入或扫码）</span>
+      <span class="badge badge-blue" id="shipStatusBadge">待生成发货单</span>
+    </div>
+
+    <!-- 增加：Excel发货单直接导入区域 -->
+    <div class="import-box">
+      <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--blue);">📄 国内没扫码？直接上传国内给出的发货 Excel 单：</div>
+      <div class="grid2">
+        <input type="file" id="shipExcelImport" accept=".xlsx,.xls,.csv">
+        <button class="btn-blue" onclick="importShipmentExcel()">解析并导入为发货清单</button>
+      </div>
+      <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">支持表头包含：SKU码/条码、商品名称、数量/发货数量。导入后会自动汇总填充到下表。</p>
     </div>
 
     <div class="stats-bar">
@@ -177,24 +187,24 @@
     </div>
 
     <div class="scan-area">
-      <input type="text" id="shipScanInput" class="scan-input" placeholder="请用扫码枪扫描商品条码/SKU码..." autocomplete="off">
+      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码补充，或直接在下方表格修改数量..." autocomplete="off">
       <button class="btn-blue" onclick="handleShipScan()">确认扫描</button>
     </div>
 
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>SKU码</th><th>商品名称</th><th>本次发货数量</th><th>操作</th></tr>
+          <tr><th>SKU码</th><th>商品名称</th><th>发货数量</th><th>操作</th></tr>
         </thead>
         <tbody id="shipTable">
-          <tr><td colspan="4" style="text-align:center; color:var(--muted);">请扫描条码，扫描到的商品将自动加入发货列表</td></tr>
+          <tr><td colspan="4" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>
         </tbody>
       </table>
     </div>
 
     <div style="margin-top: 15px; display: flex; justify-content: space-between;">
       <button class="btn-gray" onclick="clearShipList()">重置发货列表</button>
-      <button class="btn-green" id="btnSubmitShip" onclick="submitShipment()">确定发货并同步云端</button>
+      <button class="btn-green" id="btnSubmitShip" onclick="submitShipment()">确定生成发货单并保存至云端</button>
     </div>
   </div>
 
@@ -208,7 +218,7 @@
     <div class="grid2" style="margin-bottom: 12px; align-items: center;">
       <div>
         <label style="font-size:12px; font-weight:bold; color:var(--muted);">选择待收货的发货单：</label>
-        <select id="shipmentSelect" onchange="loadShipmentForReceive()" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1;">
+        <select id="shipmentSelect" onchange="loadShipmentForReceive()">
           <option value="">-- 请选择发货批次 --</option>
         </select>
       </div>
@@ -218,9 +228,9 @@
     </div>
 
     <div class="stats-bar">
-      <div class="stat-card"><b id="recPlanQty">0</b><span>应收总数</span></div>
-      <div class="stat-card"><b id="recScannedQty">0</b><span>实收总数</span></div>
-      <div class="stat-card"><b id="recDiffQty">0</b><span>差异总数</span></div>
+      <div class="stat-card"><b id="recPlanQty">0</b><span>国内发货总数</span></div>
+      <div class="stat-card"><b id="recScannedQty">0</b><span>海外实收总数</span></div>
+      <div class="stat-card"><b id="recDiffQty">0</b><span>差异件数</span></div>
     </div>
 
     <div id="receiveScanArea" class="scan-area hidden">
@@ -231,7 +241,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>SKU码</th><th>商品名称</th><th>应收件数</th><th>实收件数</th><th>差异</th><th>状态</th></tr>
+          <tr><th>SKU码</th><th>商品名称</th><th>应收(国内发)</th><th>实收(海外盘)</th><th>差异</th><th>状态</th></tr>
         </thead>
         <tbody id="receiveTable">
           <tr><td colspan="6" style="text-align:center; color:var(--muted);">请先选择发货单并点击“开始收货扫描”</td></tr>
@@ -250,7 +260,7 @@
 // 1. Firebase 初始化与超级管理员设置
 // ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyDWjeO8PG4fuTkAbfXVq_rsrt0I2KL1Yow",
+  apiKey: "AIzaSyDWjeO8PG4fUTkAbfXVq_rsrt0I2KL1Yow",
   authDomain: "kevin-warehouse.firebaseapp.com",
   databaseURL: "https://kevin-warehouse-default-rtdb.firebaseio.com",
   projectId: "kevin-warehouse",
@@ -260,7 +270,6 @@ const firebaseConfig = {
   measurementId: "G-256372QNRC"
 };
 
-// 指定管理员主邮箱
 const ADMIN_EMAIL = "caoxiao0721@gmail.com";
 
 firebase.initializeApp(firebaseConfig);
@@ -517,7 +526,57 @@ function clearMasterSku() {
   }
 }
 
-// 国内发货扫描
+// ------------------------------------------
+// 新增：导入国内给出的发货单 Excel
+// ------------------------------------------
+function importShipmentExcel() {
+  const fileInput = document.getElementById('shipExcelImport');
+  const file = fileInput.files[0];
+  if (!file) {
+    showMsg('请先选择国内给出的发货 Excel 文件！', 'bad');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+      let count = 0;
+      json.forEach(row => {
+        const keys = Object.keys(row);
+        let code = '', qty = 1;
+
+        // 匹配 SKU码/条码
+        const codeKey = keys.find(k => /Barcode|SKU码|条形码|条码|SKU/i.test(k));
+        if (codeKey) code = String(row[codeKey]).trim();
+
+        // 匹配 数量/发货数量
+        const qtyKey = keys.find(k => /数量|件数|发货量|qty/i.test(k));
+        if (qtyKey && !isNaN(parseInt(row[qtyKey]))) {
+          qty = parseInt(row[qtyKey]);
+        }
+
+        if (code) {
+          appData.currentShipment[code] = (appData.currentShipment[code] || 0) + qty;
+          count++;
+        }
+      });
+
+      saveData();
+      renderShipTable();
+      showMsg(`成功从国内发货单中导入 ${count} 种 SKU！`, 'ok');
+    } catch(err) {
+      showMsg('解析国内发货单失败，请确保格式正确！', 'bad');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// 国内发货扫描/编辑
 function handleShipScan() {
   const input = document.getElementById('shipScanInput');
   const code = input.value.trim();
@@ -531,7 +590,7 @@ function handleShipScan() {
   renderShipTable();
   
   const master = appData.masterSkuList.find(x => x.code === code);
-  const name = master ? master.name : '（未知SKU，建议先补充进基础库）';
+  const name = master ? master.name : '（未知SKU，建议补充进基础库）';
   showMsg(`[已加1] ${name} (当前累计: ${appData.currentShipment[code]})`, 'ok');
   playAudioNotice('ok');
 }
@@ -558,7 +617,7 @@ function removeShipItem(code) {
 }
 
 function clearShipList() {
-  if (confirm('确定要重置当前发货列表吗？')) {
+  if (confirm('确定要重置发货列表吗？')) {
     appData.currentShipment = {};
     saveData();
     renderShipTable();
@@ -576,20 +635,20 @@ function renderShipTable() {
   document.getElementById('shipTotalQty').textContent = totalQty;
 
   if (codes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--muted);">请扫描条码，扫描到的商品将自动加入发货列表</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>`;
     return;
   }
 
   tbody.innerHTML = codes.map(code => {
     const master = appData.masterSkuList.find(x => x.code === code);
-    const name = master ? master.name : `<span style="color:var(--red);">未在基础库找到此SKU</span>`;
+    const name = master ? master.name : `<span style="color:var(--red);">基础库未找到此SKU</span>`;
     const qty = appData.currentShipment[code];
     return `
       <tr>
         <td><b>${code}</b></td>
         <td>${name}</td>
         <td>
-          <input type="number" min="1" value="${qty}" style="width:80px; padding:4px;" onchange="updateShipQty('${code}', this.value)">
+          <input type="number" min="1" value="${qty}" style="width:100px; padding:6px; font-weight:bold;" onchange="updateShipQty('${code}', this.value)">
         </td>
         <td><button class="btn-red" style="padding:4px 8px; font-size:12px;" onclick="removeShipItem('${code}')">删除</button></td>
       </tr>
@@ -600,7 +659,7 @@ function renderShipTable() {
 function submitShipment() {
   const codes = Object.keys(appData.currentShipment || {});
   if (codes.length === 0) {
-    showMsg('发货列表为空，请先扫描商品！', 'bad');
+    showMsg('发货列表为空，请先导入或添加发货商品！', 'bad');
     return;
   }
 
@@ -619,7 +678,7 @@ function submitShipment() {
 
   renderShipTable();
   updateShipmentSelect();
-  showMsg(`发货单 ${shipId} 已生成！已同步至云端`, 'ok');
+  showMsg(`发货单 ${shipId} 已成功生成！并保存至云端`, 'ok');
   
   document.getElementById('shipmentSelect').value = shipId;
   switchStep(3);
@@ -631,7 +690,7 @@ function updateShipmentSelect() {
   const select = document.getElementById('shipmentSelect');
   select.innerHTML = '<option value="">-- 请选择发货批次 --</option>' + 
     (appData.shipmentHistory || []).map(s => `
-      <option value="${s.id}">${s.id} (${s.time}) - [${s.status === 'received' ? '已收货' : '待收货'}]</option>
+      <option value="${s.id}">${s.id} (${s.time}) - [${s.status === 'received' ? '已完成盘点' : '待盘点'}]</option>
     `).join('');
 }
 
@@ -665,7 +724,7 @@ function startReceiving() {
     saveData();
   }
 
-  document.getElementById('receiveStatusBadge').textContent = '收货盘点中';
+  document.getElementById('receiveStatusBadge').textContent = '海外收货盘点中';
   document.getElementById('receiveStatusBadge').className = 'badge badge-blue';
   document.getElementById('receiveScanArea').classList.remove('hidden');
   document.getElementById('btnExportReport').disabled = false;
@@ -691,10 +750,10 @@ function handleReceiveScan() {
 
   const isExpected = shipment.items[code] !== undefined;
   if (isExpected) {
-    showMsg(`[收货+1] 扫描成功: ${code}`, 'ok');
+    showMsg(`[实收+1] 扫描成功: ${code}`, 'ok');
     playAudioNotice('ok');
   } else {
-    showMsg(`[警告] 扫描到发货清单外商品: ${code}`, 'warn');
+    showMsg(`[警告] 扫描到国内发货单以外的商品: ${code}`, 'warn');
     playAudioNotice('bad');
   }
 
@@ -726,10 +785,10 @@ function renderReceiveTable() {
     diffSum += Math.abs(diff);
 
     const master = appData.masterSkuList.find(x => x.code === code);
-    const name = master ? master.name : (plan > 0 ? code : '<span style="color:var(--warn)">清单外商品</span>');
+    const name = master ? master.name : (plan > 0 ? code : '<span style="color:var(--warn)">发货单以外商品</span>');
 
-    let statusTag = '<span class="badge badge-green">正常</span>';
-    if (plan === 0 && rec > 0) statusTag = '<span class="badge badge-warn">发错货/清单外</span>';
+    let statusTag = '<span class="badge badge-green">数量一致</span>';
+    if (plan === 0 && rec > 0) statusTag = '<span class="badge badge-warn">多出/清单外</span>';
     else if (diff < 0) statusTag = `<span class="badge badge-red">少货 ${Math.abs(diff)}</span>`;
     else if (diff > 0) statusTag = `<span class="badge badge-warn">多货 ${diff}</span>`;
 
@@ -749,7 +808,7 @@ function renderReceiveTable() {
   document.getElementById('recScannedQty').textContent = recSum;
   document.getElementById('recDiffQty').textContent = diffSum;
 
-  document.getElementById('receiveTable').innerHTML = html || `<tr><td colspan="6" style="text-align:center; color:var(--muted);">清单无数据</td></tr>`;
+  document.getElementById('receiveTable').innerHTML = html || `<tr><td colspan="6" style="text-align:center; color:var(--muted);">发货单无数据</td></tr>`;
 }
 
 // 导出 Excel 对照单
@@ -763,8 +822,8 @@ async function exportDiffReport() {
   ws.columns = [
     { header: 'SKU码 / 条码', key: 'code', width: 22 },
     { header: '商品名称', key: 'name', width: 35 },
-    { header: '发货计划数量', key: 'plan', width: 15 },
-    { header: '实际收货数量', key: 'rec', width: 15 },
+    { header: '国内发货数量', key: 'plan', width: 15 },
+    { header: '海外实收数量', key: 'rec', width: 15 },
     { header: '数量差异', key: 'diff', width: 12 },
     { header: '盘点结论', key: 'status', width: 18 }
   ];
@@ -778,10 +837,10 @@ async function exportDiffReport() {
     const rec = receivedItems[code] || 0;
     const diff = rec - plan;
     const master = appData.masterSkuList.find(x => x.code === code);
-    const name = master ? master.name : (plan > 0 ? code : '清单外商品');
+    const name = master ? master.name : (plan > 0 ? code : '发货单以外商品');
 
     let statusText = '相符';
-    if (plan === 0 && rec > 0) statusText = '清单外发错货';
+    if (plan === 0 && rec > 0) statusText = '清单外货品';
     else if (diff < 0) statusText = `少货 ${Math.abs(diff)} 件`;
     else if (diff > 0) statusText = `多货 ${diff} 件`;
 
