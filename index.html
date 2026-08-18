@@ -804,6 +804,18 @@ document.getElementById('receiveScanInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); handleReceiveScan(); }
 });
 
+// 获取保持国内发货单顺序的 SKU 列表
+function getOrderedCodes(plannedItems, receivedItems) {
+  // 1. 先保留国内发货单的绝对原始顺序
+  const plannedCodes = Object.keys(plannedItems || {});
+  
+  // 2. 找出新加坡现场扫描到、但发货单里没有的清单外 SKU
+  const extraCodes = Object.keys(receivedItems || {}).filter(code => !plannedItems.hasOwnProperty(code));
+
+  // 3. 将清单外 SKU 追加在原发货单的末尾
+  return [...plannedCodes, ...extraCodes];
+}
+
 function renderReceiveTable() {
   const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
   if (!shipment) return;
@@ -811,7 +823,8 @@ function renderReceiveTable() {
   const plannedItems = shipment.items || {};
   const receivedItems = shipment.receiveItems || {};
 
-  const allCodes = Array.from(new Set([...Object.keys(plannedItems), ...Object.keys(receivedItems)]));
+  // 严格按照国内发货单顺序获取 codes
+  const allCodes = getOrderedCodes(plannedItems, receivedItems);
 
   let planSum = 0, recSum = 0, diffSum = 0;
 
@@ -851,7 +864,7 @@ function renderReceiveTable() {
   document.getElementById('receiveTable').innerHTML = html || `<tr><td colspan="6" style="text-align:center; color:var(--muted);">发货单无数据</td></tr>`;
 }
 
-// 导出 Excel 对照单
+// 导出 Excel 对照单 (同样保持国内发货单顺序)
 async function exportDiffReport() {
   const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
   if (!shipment) return;
@@ -870,7 +883,7 @@ async function exportDiffReport() {
 
   const plannedItems = shipment.items || {};
   const receivedItems = shipment.receiveItems || {};
-  const allCodes = Array.from(new Set([...Object.keys(plannedItems), ...Object.keys(receivedItems)]));
+  const allCodes = getOrderedCodes(plannedItems, receivedItems);
 
   allCodes.forEach(code => {
     const plan = plannedItems[code] || 0;
