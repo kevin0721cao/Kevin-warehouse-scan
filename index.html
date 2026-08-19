@@ -260,17 +260,21 @@
 
             domesticData = {};
             jsonData.forEach(row => {
-                // 自动识别各种列名
-                const sku = row['商品SKU'] || row['SKU'] || row['sku'] || row['商品编码'];
-                const qty = parseInt(row['发货数量'] || row['数量'] || row['发货数'] || 0);
-                if (sku) {
+                // 增加对更多表头名称的兼容，包括 "SKU码"
+                const sku = row['SKU码'] || row['商品SKU'] || row['SKU'] || row['sku'] || row['商品编码'] || row['条形码'] || row['SKU Code'];
+                const qty = parseInt(row['发货数量'] || row['数量'] || row['发货数'] || row['实发数量'] || 0);
+                
+                if (sku !== undefined && sku !== null) {
                     const cleanSKU = String(sku).trim().toUpperCase();
-                    domesticData[cleanSKU] = (domesticData[cleanSKU] || 0) + qty;
+                    if (cleanSKU && !isNaN(qty)) {
+                        domesticData[cleanSKU] = (domesticData[cleanSKU] || 0) + qty;
+                    }
                 }
             });
 
-            document.getElementById('importStatus').innerText = `✅ 成功导入 ${Object.keys(domesticData).length} 个 SKU`;
-            speak(`发货清单导入成功，共 ${Object.keys(domesticData).length} 种商品`);
+            const count = Object.keys(domesticData).length;
+            document.getElementById('importStatus').innerText = `✅ 成功导入 ${count} 个 SKU`;
+            speak(`发货清单导入成功，共 ${count} 种商品`);
             renderReconTable();
         };
         reader.readAsArrayBuffer(file);
