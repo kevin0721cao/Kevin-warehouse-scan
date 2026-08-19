@@ -16,7 +16,7 @@
             --bg: #f8fafc;
         }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 15px; }
-        .container { max-width: 900px; margin: 0 auto; }
+        .container { max-width: 950px; margin: 0 auto; }
         .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h2 { margin-top: 0; color: #1e293b; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; }
         
@@ -116,13 +116,14 @@
                 <thead>
                     <tr>
                         <th>商品 SKU</th>
+                        <th>商品名称</th>
                         <th>国内发货数</th>
                         <th>海外已扫数</th>
                         <th>对账状态 / 差异</th>
                     </tr>
                 </thead>
                 <tbody id="reconTableBody">
-                    <tr><td colspan="4" style="text-align: center; color: #94a3b8;">暂无数据，请先导入国内发货清单或开始扫描</td></tr>
+                    <tr><td colspan="5" style="text-align: center; color: #94a3b8;">暂无数据，请先导入国内发货清单或开始扫描</td></tr>
                 </tbody>
             </table>
         </div>
@@ -179,7 +180,7 @@
 
 <script>
     // ==================== 全局状态与语音 ====================
-    let activeTab = "RECON"; // "RECON" 或 "SHELF"
+    let activeTab = "RECON"; 
     let isAudioReady = false;
 
     function speak(text, tone = 'normal') {
@@ -234,8 +235,8 @@
     });
 
     // ==================== 模块一：国内发货与海外仓对账数据逻辑 ====================
-    let domesticData = {}; // { "SKU_A": 10, "SKU_B": 20 }
-    let overseasScanData = {}; // { "SKU_A": 10, "SKU_B": 19 }
+    let domesticData = {}; // 格式: { "SKU1": { qty: 20, name: "商品A" } }
+    let overseasScanData = {}; 
 
     const scannerRecon = document.getElementById('scannerRecon');
 
@@ -260,14 +261,17 @@
 
             domesticData = {};
             jsonData.forEach(row => {
-                // 增加对更多表头名称的兼容，包括 "SKU码"
                 const sku = row['SKU码'] || row['商品SKU'] || row['SKU'] || row['sku'] || row['商品编码'] || row['条形码'] || row['SKU Code'];
                 const qty = parseInt(row['发货数量'] || row['数量'] || row['发货数'] || row['实发数量'] || 0);
+                const name = row['商品名称'] || row['品名'] || row['商品明细'] || '未知商品';
                 
                 if (sku !== undefined && sku !== null) {
                     const cleanSKU = String(sku).trim().toUpperCase();
                     if (cleanSKU && !isNaN(qty)) {
-                        domesticData[cleanSKU] = (domesticData[cleanSKU] || 0) + qty;
+                        if (!domesticData[cleanSKU]) {
+                            domesticData[cleanSKU] = { qty: 0, name: name };
+                        }
+                        domesticData[cleanSKU].qty += qty;
                     }
                 }
             });
@@ -283,13 +287,14 @@
     function handleReconScan(sku) {
         overseasScanData[sku] = (overseasScanData[sku] || 0) + 1;
         const currentScanned = overseasScanData[sku];
-        const targetQty = domesticData[sku] || 0;
+        const targetQty = domesticData[sku] ? domesticData[sku].qty : 0;
+        const itemName = domesticData[sku] ? domesticData[sku].name : '';
 
         if (!(sku in domesticData)) {
             updateReconStatus(`⚠️ 警告：SKU [ ${sku} ] 不在国内发货清单中！(已扫 ${currentScanned} 件)`, 'warn');
             speak(`警告，该商品不在发货清单中`, 'warn');
         } else if (currentScanned > targetQty) {
-            updateReconStatus(`⚠️ 警告：SKU [ ${sku} ] 超发/多扫！应发 ${targetQty}，已扫 ${currentScanned}`, 'warn');
+            updateReconStatus(`⚠️ 警告：[${itemName}] SKU [ ${sku} ] 超发/多扫！应发 ${targetQty}，已扫 ${currentScanned}`, 'warn');
             speak(`警告，数量超出发货数`, 'warn');
         } else if (currentScanned === targetQty) {
             updateReconStatus(`✅ [ ${sku} ] 扫码成功，该商品数量已完全匹配 (${currentScanned}/${targetQty})`, 'active');
@@ -315,12 +320,13 @@
         const allSKUs = Array.from(new Set([...Object.keys(domesticData), ...Object.keys(overseasScanData)]));
 
         if (allSKUs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8;">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8;">暂无数据，请先导入国内发货清单或开始扫描</td></tr>';
             return;
         }
 
         allSKUs.forEach(sku => {
-            const sendQty = domesticData[sku] || 0;
+            const sendQty = domesticData[sku] ? domesticData[sku].qty : 0;
+            const name = domesticData[sku] ? domesticData[sku].name : '未知/额外商品';
             const recvQty = overseasScanData[sku] || 0;
             const diff = recvQty - sendQty;
 
@@ -338,6 +344,7 @@
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><strong>${sku}</strong></td>
+                <td>${name}</td>
                 <td>${sendQty}</td>
                 <td>${recvQty}</td>
                 <td>${statusHTML}</td>
@@ -354,7 +361,8 @@
         }
 
         const reportData = allSKUs.map(sku => {
-            const sendQty = domesticData[sku] || 0;
+            const sendQty = domesticData[sku] ? domesticData[sku].qty : 0;
+            const name = domesticData[sku] ? domesticData[sku].name : '未知/额外商品';
             const recvQty = overseasScanData[sku] || 0;
             const diff = recvQty - sendQty;
             let resultText = "完全匹配";
@@ -364,6 +372,7 @@
 
             return {
                 "商品 SKU": sku,
+                "商品名称": name,
                 "国内发货数量": sendQty,
                 "海外实收扫描": recvQty,
                 "差异数量": diff,
@@ -427,7 +436,6 @@
         if (code === 'CMD_CONFIRM') { confirmPending(); return; }
 
         if (currentShelfMode === 'QUERY') {
-            // 查询逻辑
             if (shelfPattern.test(code)) {
                 const foundSKUs = [];
                 for (const [sku, shelves] of Object.entries(bindings)) {
@@ -451,7 +459,6 @@
                 }
             }
         } else {
-            // 上架逻辑
             if (shelfPattern.test(code)) {
                 currentShelf = code;
                 pendingSKU = "";
