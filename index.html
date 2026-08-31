@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>店铺出入库盘点与库位系统 (批量绑定版)</title>
+  <title>店铺出入库盘点与库位系统 (含蓝牙标签打印)</title>
   
   <!-- Excel 库 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
@@ -18,8 +18,8 @@
   <style>
     :root {
       --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
-      --primary: #111827; --blue: #2563eb; --green: #16a34a; --red: #dc2626; --warn: #d97706; --purple: #7c3aed;
-      --okbg: #dcfce7; --badbg: #fee2e2; --warnbg: #fef3c7; --bluebg: #dbeafe; --purplebg: #f3e8ff;
+      --primary: #111827; --blue: #2563eb; --green: #16a34a; --red: #dc2626; --warn: #d97706; --purple: #7c3aed; --teal: #0d9488;
+      --okbg: #dcfce7; --badbg: #fee2e2; --warnbg: #fef3c7; --bluebg: #dbeafe; --purplebg: #f3e8ff; --tealbg: #ccfbf1;
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
@@ -37,15 +37,15 @@
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     
-    .step-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
-    .tab-btn { border: none; padding: 10px 4px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); font-size: 13px; }
+    .step-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+    .tab-btn { border: none; padding: 10px 4px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); font-size: 12px; text-align: center; }
     .tab-btn.active { background: var(--blue); color: white; }
 
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .scan-area { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
     .scan-input { font-size: 18px!important; font-weight: 800; padding: 10px; width: 100%; border: 2px solid #3b82f6; border-radius: 10px; }
     
-    input[type=text], input[type=email], input[type=password], input[type=file], select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    input[type=text], input[type=email], input[type=password], input[type=file], input[type=number], select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
     button { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: white; }
@@ -53,6 +53,7 @@
     .btn-green { background: var(--green); color: white; }
     .btn-red { background: var(--red); color: white; }
     .btn-purple { background: var(--purple); color: white; }
+    .btn-teal { background: var(--teal); color: white; }
     .btn-gray { background: #e5e7eb; color: #111827; }
 
     table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
@@ -67,6 +68,7 @@
     .badge-red { background: var(--badbg); color: var(--red); }
     .badge-warn { background: var(--warnbg); color: var(--warn); }
     .badge-purple { background: var(--purplebg); color: var(--purple); margin: 2px; }
+    .badge-teal { background: var(--tealbg); color: var(--teal); }
 
     .message { padding: 10px 14px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; display: none; }
     .message.show { display: block; }
@@ -90,13 +92,16 @@
     .hidden { display: none !important; }
     .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
     
-    /* 批量绑定面板样式 */
     .bind-box { background: #f3e8ff; border: 2px dashed #9333ea; padding: 14px; border-radius: 10px; margin-bottom: 12px; }
     .pending-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; background: white; border-radius: 8px; border: 1px solid #e9d5ff; min-height: 45px; align-items: center; }
 
+    /* 蓝牙打印专属样式 */
+    .print-box { background: #f0fdf4; border: 2px dashed #16a34a; padding: 16px; border-radius: 10px; margin-bottom: 12px; }
+    .label-preview { background: white; border: 2px solid #111827; width: 220px; height: 130px; margin: 10px auto; padding: 8px; text-align: center; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; justify-content: space-between; }
+
     @media(max-width: 640px) { 
       .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } 
-      .step-tabs { grid-template-columns: repeat(2, 1fr); }
+      .step-tabs { grid-template-columns: repeat(3, 1fr); }
     }
   </style>
 </head>
@@ -125,7 +130,7 @@
   <div class="header">
     <div>
       <h1>店铺出入库盘点与库位系统</h1>
-      <p>基础SKU库 ➔ 货架位绑定 ➔ 国内发货 ➔ 海外盘点</p>
+      <p>基础SKU库 ➔ 货架位绑定 ➔ 蓝牙标签打印 ➔ 国内发货 ➔ 海外盘点</p>
     </div>
     <div class="user-box">
       <span id="dbStatusTag" class="db-status">连接检查中...</span>
@@ -150,9 +155,10 @@
 
   <div class="step-tabs">
     <button class="tab-btn active" id="tab1" onclick="switchStep(1)">1. SKU 基础库</button>
-    <button class="tab-btn" id="tab4" onclick="switchStep(4)">2. 货架位绑定 (多对一)</button>
-    <button class="tab-btn" id="tab2" onclick="switchStep(2)">3. 国内发货清单</button>
-    <button class="tab-btn" id="tab3" onclick="switchStep(3)">4. 海外收货盘点</button>
+    <button class="tab-btn" id="tab4" onclick="switchStep(4)">2. 货架位绑定</button>
+    <button class="tab-btn" id="tab5" onclick="switchStep(5)">3. 🏷️ 蓝牙打印</button>
+    <button class="tab-btn" id="tab2" onclick="switchStep(2)">4. 国内发货</button>
+    <button class="tab-btn" id="tab3" onclick="switchStep(3)">5. 海外盘点</button>
   </div>
 
   <!-- STEP 1: SKU基础库导入 -->
@@ -183,10 +189,10 @@
     </div>
   </div>
 
-  <!-- STEP 4: 升级版 - 批量货架位绑定页面 -->
+  <!-- STEP 4: 批量货架位绑定页面 -->
   <div id="step4" class="card hidden">
     <div class="title">
-      <span>步骤二：货架位绑定 (支持多 SKU 连续扫码后统一绑定货架)</span>
+      <span>步骤二：货架位绑定 (多对一)</span>
       <span class="badge badge-purple" id="boundCountBadge">已绑定 0 个库位映射</span>
     </div>
 
@@ -206,7 +212,6 @@
         </div>
       </div>
 
-      <!-- 待绑定商品暂存队列 -->
       <div style="margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
         <span style="font-size:12px; font-weight:bold; color:var(--muted);">
           📦 待绑定商品列表 (<b id="pendingCount" style="color:var(--purple);">0</b> 个)：
@@ -232,7 +237,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>SKU码</th><th>商品名称</th><th>已绑定的货架库位列表 (点击可删除单个)</th></tr>
+          <tr><th>SKU码</th><th>商品名称</th><th>已绑定的货架库位列表</th></tr>
         </thead>
         <tbody id="locationTable">
           <tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无货架绑定数据</td></tr>
@@ -241,10 +246,61 @@
     </div>
   </div>
 
+  <!-- STEP 5: 新增 - 蓝牙便携打印机 & 扫码即打印页面 -->
+  <div id="step5" class="card hidden">
+    <div class="title">
+      <span>步骤三：扫码自动打印 SKU 标签</span>
+      <span class="badge badge-teal" id="bluetoothStatusTag">🔌 蓝牙打印机: 未连接</span>
+    </div>
+
+    <div class="print-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+        <div>
+          <button class="btn-teal" onclick="connectBluetoothPrinter()">🖨️ 连接手机蓝牙便携打印机</button>
+          <span style="font-size:12px; color:var(--muted); margin-left:8px;">支持标准 ESC/POS 蓝牙标签打印机</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <label style="font-size:13px; font-weight:bold; cursor:pointer;">
+            <input type="checkbox" id="autoPrintToggle" checked> 扫码后自动触发打印
+          </label>
+          <span style="font-size:13px; font-weight:bold;">份数:</span>
+          <input type="number" id="printCopies" value="1" min="1" max="10" style="width:60px; padding:4px 8px;">
+        </div>
+      </div>
+
+      <div class="scan-area">
+        <input type="text" id="printScanInput" class="scan-input" placeholder="扫码枪扫描条码/SKU，立即打印标签..." autocomplete="off">
+        <button class="btn-green" onclick="triggerScanPrint()">🖨️ 打印标签</button>
+      </div>
+
+      <!-- 标签预览卡片 -->
+      <div style="text-align:center; margin-top:10px;">
+        <span style="font-size:12px; font-weight:bold; color:var(--muted);">🏷️ 当前待打印标签预览：</span>
+        <div class="label-preview">
+          <div style="font-size:10px; font-weight:bold; border-bottom:1px solid #111827; padding-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" id="prevName">示例商品名称</div>
+          <div style="font-size:22px; font-weight:900; letter-spacing:1px; margin:4px 0;" id="prevCode">SKU-123456</div>
+          <div style="font-size:10px; font-family:monospace; color:#374151;" id="prevLoc">货架位: A-01-01</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="title" style="font-size:14px; margin-top:16px;">打印历史日志：</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>时间</th><th>SKU码</th><th>商品名称</th><th>绑定货架</th><th>状态</th></tr>
+        </thead>
+        <tbody id="printLogTable">
+          <tr><td colspan="5" style="text-align:center; color:var(--muted);">暂无打印记录</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- STEP 2: 国内发货 -->
   <div id="step2" class="card hidden">
     <div class="title">
-      <span>步骤三：国内发货生成（支持 Excel 导入或扫码）</span>
+      <span>步骤四：国内发货生成</span>
       <span class="badge badge-blue" id="shipStatusBadge">待生成发货单</span>
     </div>
 
@@ -254,7 +310,6 @@
         <input type="file" id="shipExcelImport" accept=".xlsx,.xls,.csv">
         <button class="btn-blue" onclick="importShipmentExcel()">解析并导入为发货清单</button>
       </div>
-      <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">支持表头：<b>SKU码</b>、<b>商品名称</b>、<b>发货数量</b>。</p>
     </div>
 
     <div class="stats-bar">
@@ -263,7 +318,7 @@
     </div>
 
     <div class="scan-area">
-      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码补充，或直接在下方表格修改数量..." autocomplete="off">
+      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码补充发货清单..." autocomplete="off">
       <button class="btn-blue" onclick="handleShipScan()">确认扫描</button>
     </div>
 
@@ -273,21 +328,21 @@
           <tr><th>SKU码</th><th>商品名称</th><th>对应货架位</th><th>发货数量</th><th>操作</th></tr>
         </thead>
         <tbody id="shipTable">
-          <tr><td colspan="5" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>
+          <tr><td colspan="5" style="text-align:center; color:var(--muted);">请上传发货 Excel 或扫描条码</td></tr>
         </tbody>
       </table>
     </div>
 
     <div style="margin-top: 15px; display: flex; justify-content: space-between;">
-      <button class="btn-red" onclick="clearShipList()">🗑️ 清空国内发货单</button>
-      <button class="btn-green" id="btnSubmitShip" onclick="submitShipment()">确定生成发货单并保存至云端</button>
+      <button class="btn-red" onclick="clearShipList()">🗑️ 清空发货单</button>
+      <button class="btn-green" onclick="submitShipment()">确定生成发货单并保存</button>
     </div>
   </div>
 
   <!-- STEP 3: 海外收货盘点 -->
   <div id="step3" class="card hidden">
     <div class="title">
-      <span>步骤四：海外收货扫描与差异对比</span>
+      <span>步骤五：海外收货扫描与差异对比</span>
       <span class="badge badge-warn" id="receiveStatusBadge">等待选择发货单</span>
     </div>
 
@@ -318,7 +373,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>SKU码</th><th>商品名称</th><th>货架位</th><th>应收(国内发)</th><th>实收(海外盘)</th><th>差异</th><th>状态</th></tr>
+          <tr><th>SKU码</th><th>商品名称</th><th>货架位</th><th>应收</th><th>实收</th><th>差异</th><th>状态</th></tr>
         </thead>
         <tbody id="receiveTable">
           <tr><td colspan="7" style="text-align:center; color:var(--muted);">请先选择发货单并点击“开始收货扫描”</td></tr>
@@ -327,8 +382,8 @@
     </div>
 
     <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-      <button class="btn-red" onclick="clearAllShipments()">🗑️ 清空/重置所有历史发货批次</button>
-      <button class="btn-green" id="btnExportReport" onclick="exportDiffReport()" disabled>导出出入库对照盘点单 (Excel)</button>
+      <button class="btn-red" onclick="clearAllShipments()">🗑️ 清空所有历史发货批次</button>
+      <button class="btn-green" id="btnExportReport" onclick="exportDiffReport()" disabled>导出差异对照单 (Excel)</button>
     </div>
   </div>
 </div>
@@ -352,7 +407,6 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 
-// 监测 Firebase 连接状态
 db.ref('.info/connected').on('value', snap => {
   const statusTag = document.getElementById('dbStatusTag');
   if (snap.val() === true) {
@@ -369,7 +423,12 @@ let targetUid = null;
 let dataRef = null;
 let allUsersMap = {};
 
-let pendingSkuList = []; // 待绑定暂存队列
+let pendingSkuList = []; 
+let printLogHistory = [];
+
+// 蓝牙打印机连接对象
+let bluetoothDevice = null;
+let printCharacteristic = null;
 
 let appData = {
   masterSkuList: [],
@@ -379,7 +438,6 @@ let appData = {
   activeShipmentId: null
 };
 
-// 监听登录状态
 auth.onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
@@ -403,7 +461,6 @@ auth.onAuthStateChanged(user => {
     }
 
     bindDataListener(targetUid);
-
   } else {
     currentUser = null;
     targetUid = null;
@@ -420,10 +477,8 @@ function loadAllClientsList() {
   db.ref('users').on('value', snapshot => {
     const users = snapshot.val() || {};
     allUsersMap = users;
-    
     const select = document.getElementById('clientSelect');
     select.innerHTML = '<option value="">我的个人数据</option>';
-
     Object.keys(users).forEach(uid => {
       if (uid !== currentUser.uid) {
         const email = (users[uid].profile && users[uid].profile.email) ? users[uid].profile.email : uid;
@@ -447,13 +502,11 @@ function switchTargetUser() {
     targetUid = currentUser.uid;
     notice.classList.add('hidden');
   }
-
   bindDataListener(targetUid);
 }
 
 function bindDataListener(uid) {
   if (dataRef) dataRef.off();
-
   dataRef = db.ref(`users/${uid}/wms_data`);
   dataRef.on('value', snapshot => {
     const val = snapshot.val();
@@ -487,19 +540,14 @@ function handleAuth(type) {
   }
 
   if (type === 'login') {
-    auth.signInWithEmailAndPassword(email, password)
-      .catch(err => alert('登录失败: ' + err.message));
+    auth.signInWithEmailAndPassword(email, password).catch(err => alert('登录失败: ' + err.message));
   } else {
-    auth.createUserWithEmailAndPassword(email, password)
-      .then(() => alert('注册成功并已自动登录！'))
-      .catch(err => alert('注册失败: ' + err.message));
+    auth.createUserWithEmailAndPassword(email, password).then(() => alert('注册成功并已自动登录！')).catch(err => alert('注册失败: ' + err.message));
   }
 }
 
 function handleLogout() {
-  if (confirm('确定要退出登录吗？')) {
-    auth.signOut();
-  }
+  if (confirm('确定要退出登录吗？')) auth.signOut();
 }
 
 function saveData(cb) {
@@ -507,10 +555,7 @@ function saveData(cb) {
   if (activeUid) {
     db.ref(`users/${activeUid}/wms_data`).set(appData)
       .then(() => { if (cb) cb(true); })
-      .catch(err => {
-        showMsg('云端同步失败: ' + err.message, 'bad');
-        if (cb) cb(false);
-      });
+      .catch(err => { showMsg('云端同步失败: ' + err.message, 'bad'); if (cb) cb(false); });
   } else {
     showMsg('尚未登录，无法更新云端数据库！', 'bad');
   }
@@ -521,7 +566,6 @@ function manualSaveMasterSku() {
     showMsg('当前列表无商品数据，请先选择 Excel 文件！', 'warn');
     return;
   }
-
   saveData((success) => {
     if (success) showMsg(`✅ 已成功保存 ${appData.masterSkuList.length} 个 SKU 到云端！`, 'ok');
   });
@@ -535,10 +579,8 @@ function showMsg(text, type = 'ok') {
   box.timer = setTimeout(() => box.className = 'message', 4000);
 }
 
-// 蜂鸣音效 + 原生语音播报（重复提醒）
 function speakRepeatWarning() {
   playAudioNotice('repeat');
-  
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance('重复');
@@ -558,40 +600,163 @@ function playAudioNotice(type = 'ok') {
     gain.connect(ctx.destination);
     
     if (type === 'ok') {
-      osc.frequency.value = 880;
-      gain.gain.value = 0.1;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.1);
+      osc.frequency.value = 880; gain.gain.value = 0.1; osc.start(); osc.stop(ctx.currentTime + 0.1);
     } else if (type === 'repeat') {
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(400, ctx.currentTime);
       osc.frequency.setValueAtTime(800, ctx.currentTime + 0.1);
       osc.frequency.setValueAtTime(400, ctx.currentTime + 0.2);
-      gain.gain.value = 0.3;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      gain.gain.value = 0.3; osc.start(); osc.stop(ctx.currentTime + 0.35);
     } else {
-      osc.frequency.value = 300;
-      gain.gain.value = 0.2;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.25);
+      osc.frequency.value = 300; gain.gain.value = 0.2; osc.start(); osc.stop(ctx.currentTime + 0.25);
     }
   } catch(e) {}
 }
 
 function switchStep(step) {
-  [1, 2, 3, 4].forEach(i => {
+  [1, 2, 3, 4, 5].forEach(i => {
     document.getElementById(`step${i}`).classList.toggle('hidden', i !== step);
     document.getElementById(`tab${i}`).classList.toggle('active', i === step);
   });
   if(step === 4) setTimeout(() => document.getElementById('bindSkuInput').focus(), 100);
+  if(step === 5) setTimeout(() => document.getElementById('printScanInput').focus(), 100);
   if(step === 2) setTimeout(() => document.getElementById('shipScanInput').focus(), 100);
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
-// ------------------- 升级版：多对一批量绑定逻辑 ------------------- //
+// ------------------- 蓝牙便携打印机 Web Bluetooth 模块 ------------------- //
 
-// 扫码追加 SKU 到待绑定列表
+async function connectBluetoothPrinter() {
+  if (!navigator.bluetooth) {
+    alert('您的浏览器或设备不支持 Web Bluetooth 功能！请使用 Android 手机上的 Chrome 浏览器。');
+    return;
+  }
+
+  try {
+    showMsg('正在搜索蓝牙打印机...', 'warn');
+    bluetoothDevice = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '49535343-fe7d-41aa-a7f2-3ba7027d9b06']
+    });
+
+    const server = await bluetoothDevice.gatt.connect();
+    const services = await server.getPrimaryServices();
+    
+    for (const service of services) {
+      const characteristics = await service.getCharacteristics();
+      for (const char of characteristics) {
+        if (char.properties.write || char.properties.writeWithoutResponse) {
+          printCharacteristic = char;
+          break;
+        }
+      }
+      if (printCharacteristic) break;
+    }
+
+    if (printCharacteristic) {
+      const tag = document.getElementById('bluetoothStatusTag');
+      tag.textContent = `🟢 蓝牙打印机: ${bluetoothDevice.name || '已连接'}`;
+      tag.className = 'badge badge-green';
+      showMsg(`✅ 已成功连接蓝牙打印机: ${bluetoothDevice.name || '打印设备'}`, 'ok');
+    } else {
+      showMsg('未找到可写的打印服务特征值，请重新连接！', 'bad');
+    }
+  } catch (err) {
+    showMsg('蓝牙连接取消或失败: ' + err.message, 'bad');
+  }
+}
+
+// 扫码触发打印逻辑
+function triggerScanPrint() {
+  const input = document.getElementById('printScanInput');
+  const code = input.value.trim();
+  input.value = '';
+  input.focus();
+
+  if (!code) return;
+
+  const master = appData.masterSkuList.find(x => x.code === code);
+  const name = master ? master.name : '未知商品';
+  const locs = (appData.locationMap && appData.locationMap[code]) ? appData.locationMap[code].join(', ') : '未绑定';
+
+  // 更新预览视图
+  document.getElementById('prevCode').textContent = code;
+  document.getElementById('prevName').textContent = name;
+  document.getElementById('prevLoc').textContent = `货架位: ${locs}`;
+
+  const isAuto = document.getElementById('autoPrintToggle').checked;
+  const copies = parseInt(document.getElementById('printCopies').value) || 1;
+
+  if (isAuto) {
+    executePrint(code, name, locs, copies);
+  } else {
+    showMsg(`已检索到 SKU: ${code}，点击右侧打印按钮送出打印。`, 'ok');
+  }
+}
+
+document.getElementById('printScanInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); triggerScanPrint(); }
+});
+
+// ESC/POS 热敏打印指令发送
+async function executePrint(code, name, locs, copies = 1) {
+  playAudioNotice('ok');
+
+  // 记录历史
+  printLogHistory.unshift({
+    time: new Date().toLocaleTimeString(),
+    code, name, locs,
+    status: printCharacteristic ? '已送出打印' : '未连接打印机(模拟打印)'
+  });
+  renderPrintLogs();
+
+  if (!printCharacteristic) {
+    showMsg(`⚠️ 蓝牙打印机未连接！(已在模拟器展示打印卡片: ${code})`, 'warn');
+    return;
+  }
+
+  try {
+    for (let c = 0; c < copies; c++) {
+      let encoder = new TextEncoder();
+      // ESC/POS 指令集初始化
+      let cmds = [
+        0x1B, 0x40,             // 初始化打印机
+        0x1B, 0x61, 0x01,       // 居中对齐
+        ...encoder.encode(`${name}\n`), // 打印商品名
+        0x1D, 0x21, 0x11,       // 放大字体
+        ...encoder.encode(`${code}\n`), // 打印 SKU
+        0x1D, 0x21, 0x00,       // 还原字体
+        ...encoder.encode(`LOCATION: ${locs}\n\n\n`), // 打印货架号并走纸
+        0x1D, 0x56, 0x42, 0x00  // 切纸 (视设备支持)
+      ];
+
+      await printCharacteristic.writeValue(new Uint8Array(cmds));
+    }
+    showMsg(`🖨️ SKU【${code}】标签打印指令已成功送出！`, 'ok');
+  } catch (err) {
+    showMsg('打印指令发送失败: ' + err.message, 'bad');
+  }
+}
+
+function renderPrintLogs() {
+  const tbody = document.getElementById('printLogTable');
+  if (printLogHistory.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--muted);">暂无打印记录</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = printLogHistory.map(item => `
+    <tr>
+      <td>${item.time}</td>
+      <td><b>${item.code}</b></td>
+      <td>${item.name}</td>
+      <td><span class="badge badge-purple">${item.locs}</span></td>
+      <td><span class="badge ${item.status.includes('已送出') ? 'badge-green' : 'badge-warn'}">${item.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+// ------------------- 步骤二：批量绑定逻辑 ------------------- //
+
 function addPendingSku() {
   const input = document.getElementById('bindSkuInput');
   const code = input.value.trim();
@@ -600,14 +765,12 @@ function addPendingSku() {
 
   if (!code) return;
 
-  // 1. 检查是否在当前暂存队列里
   if (pendingSkuList.includes(code)) {
     speakRepeatWarning();
     showMsg(`⚠️ SKU【${code}】已经在待绑定列表中，请勿重复扫描！`, 'bad');
     return;
   }
 
-  // 2. 加入待绑定队列
   pendingSkuList.push(code);
   playAudioNotice('ok');
   showMsg(`已追加商品 SKU: ${code}`, 'ok');
@@ -653,7 +816,6 @@ function renderPendingTags() {
   }).join('');
 }
 
-// 执行批量绑定
 function handleBatchBind() {
   const locInput = document.getElementById('bindLocationInput');
   const location = locInput.value.trim().toUpperCase();
@@ -677,8 +839,6 @@ function handleBatchBind() {
 
   pendingSkuList.forEach(code => {
     if (!appData.locationMap[code]) appData.locationMap[code] = [];
-    
-    // 检查此 SKU 是否已绑定过该货架号
     if (appData.locationMap[code].includes(location)) {
       duplicateFound = true;
     } else {
@@ -687,10 +847,9 @@ function handleBatchBind() {
     }
   });
 
-  // 如果有重复绑定，播放语音提醒
   if (duplicateFound) {
     speakRepeatWarning();
-    showMsg(`⚠️ 提示：列表中的部分商品先前已绑定过货架【${location}】，系统已忽略重复项。`, 'bad');
+    showMsg(`⚠️ 提示：部分商品先前已绑定过货架【${location}】，系统已忽略重复项。`, 'bad');
   }
 
   if (addedCount > 0) {
@@ -699,7 +858,6 @@ function handleBatchBind() {
     showMsg(`✅ 成功将 ${addedCount} 个 SKU 批量绑定到货架【${location}】！`, 'ok');
   }
 
-  // 清空暂存与输入框
   pendingSkuList = [];
   locInput.value = '';
   renderPendingTags();
@@ -710,9 +868,7 @@ function handleBatchBind() {
 function removeSingleLocation(code, loc) {
   if (!appData.locationMap || !appData.locationMap[code]) return;
   appData.locationMap[code] = appData.locationMap[code].filter(l => l !== loc);
-  if (appData.locationMap[code].length === 0) {
-    delete appData.locationMap[code];
-  }
+  if (appData.locationMap[code].length === 0) delete appData.locationMap[code];
   saveData();
   renderLocationTable();
   showMsg(`已解绑库位 ${loc}`, 'warn');
@@ -782,7 +938,7 @@ function getLocationTags(code) {
   return locs.map(l => `<span class="badge badge-purple">${l}</span>`).join(' ');
 }
 
-// ------------------- STEP 1 & STEP 2 & STEP 3 逻辑保留 ------------------- //
+// ------------------- 其他基础逻辑 ------------------- //
 
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -863,10 +1019,7 @@ function clearMasterSku() {
 function importShipmentExcel() {
   const fileInput = document.getElementById('shipExcelImport');
   const file = fileInput.files[0];
-  if (!file) {
-    showMsg('请先选择国内给出的发货 Excel 文件！', 'bad');
-    return;
-  }
+  if (!file) { showMsg('请先选择国内给出的发货 Excel 文件！', 'bad'); return; }
 
   const reader = new FileReader();
   reader.onload = function(evt) {
@@ -880,14 +1033,10 @@ function importShipmentExcel() {
       json.forEach(row => {
         const keys = Object.keys(row);
         let code = '', qty = 1;
-
         const codeKey = keys.find(k => /SKU码|SKU编号|SKU|Barcode|条形码|条码|编码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
-
         const qtyKey = keys.find(k => /发货数量|数量|件数|qty/i.test(k));
-        if (qtyKey && !isNaN(parseInt(row[qtyKey]))) {
-          qty = parseInt(row[qtyKey]);
-        }
+        if (qtyKey && !isNaN(parseInt(row[qtyKey]))) qty = parseInt(row[qtyKey]);
 
         if (code) {
           appData.currentShipment[code] = (appData.currentShipment[code] || 0) + qty;
@@ -918,7 +1067,7 @@ function handleShipScan() {
   renderShipTable();
   
   const master = appData.masterSkuList.find(x => x.code === code);
-  const name = master ? master.name : '（未知SKU，建议补充进基础库）';
+  const name = master ? master.name : '（未知SKU）';
   showMsg(`[已加1] ${name} (当前累计: ${appData.currentShipment[code]})`, 'ok');
   playAudioNotice('ok');
 }
@@ -929,11 +1078,8 @@ document.getElementById('shipScanInput').addEventListener('keydown', e => {
 
 function updateShipQty(code, qty) {
   const num = parseInt(qty);
-  if (isNaN(num) || num <= 0) {
-    delete appData.currentShipment[code];
-  } else {
-    appData.currentShipment[code] = num;
-  }
+  if (isNaN(num) || num <= 0) delete appData.currentShipment[code];
+  else appData.currentShipment[code] = num;
   saveData();
   renderShipTable();
 }
@@ -979,9 +1125,7 @@ function renderShipTable() {
         <td><b>${code}</b></td>
         <td>${name}</td>
         <td>${locTags}</td>
-        <td>
-          <input type="number" min="1" value="${qty}" style="width:100px; padding:6px; font-weight:bold;" onchange="updateShipQty('${code}', this.value)">
-        </td>
+        <td><input type="number" min="1" value="${qty}" style="width:100px; padding:6px; font-weight:bold;" onchange="updateShipQty('${code}', this.value)"></td>
         <td><button class="btn-red" style="padding:4px 8px; font-size:12px;" onclick="removeShipItem('${code}')">删除</button></td>
       </tr>
     `;
@@ -990,19 +1134,10 @@ function renderShipTable() {
 
 function submitShipment() {
   const codes = Object.keys(appData.currentShipment || {});
-  if (codes.length === 0) {
-    showMsg('发货列表为空，请先导入或添加发货商品！', 'bad');
-    return;
-  }
+  if (codes.length === 0) { showMsg('发货列表为空，请先导入或添加发货商品！', 'bad'); return; }
 
   const shipId = 'SHIP-' + new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-  const newShipment = {
-    id: shipId,
-    time: new Date().toLocaleString(),
-    items: { ...appData.currentShipment },
-    receiveItems: {},
-    status: 'shipped'
-  };
+  const newShipment = { id: shipId, time: new Date().toLocaleString(), items: { ...appData.currentShipment }, receiveItems: {}, status: 'shipped' };
 
   if(!appData.shipmentHistory) appData.shipmentHistory = [];
   appData.shipmentHistory.unshift(newShipment);
@@ -1011,7 +1146,7 @@ function submitShipment() {
 
   renderShipTable();
   updateShipmentSelect();
-  showMsg(`发货单 ${shipId} 已成功生成！并保存至云端`, 'ok');
+  showMsg(`发货单 ${shipId} 已成功生成！`, 'ok');
   
   document.getElementById('shipmentSelect').value = shipId;
   switchStep(3);
@@ -1055,10 +1190,7 @@ function startReceiving() {
   const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
   if (!shipment) return;
 
-  if (shipment.status === 'shipped') {
-    shipment.status = 'receiving';
-    saveData();
-  }
+  if (shipment.status === 'shipped') { shipment.status = 'receiving'; saveData(); }
 
   document.getElementById('receiveStatusBadge').textContent = '海外收货盘点中';
   document.getElementById('receiveStatusBadge').className = 'badge badge-blue';
@@ -1106,7 +1238,6 @@ function renderReceiveTable() {
 
   const plannedItems = shipment.items || {};
   const receivedItems = shipment.receiveItems || {};
-
   const allCodes = Array.from(new Set([...Object.keys(plannedItems), ...Object.keys(receivedItems)]));
 
   let planSum = 0, recSum = 0, diffSum = 0;
@@ -1165,7 +1296,7 @@ function deleteCurrentShipment() {
 }
 
 function clearAllShipments() {
-  if (confirm('⚠️ 警告：确定要彻底重置/清空【所有发货批次与收货盘点历史】吗？\n这是针对新客户全新任务的重置功能。')) {
+  if (confirm('⚠️ 警告：确定要彻底重置/清空【所有发货批次与收货盘点历史】吗？')) {
     appData.shipmentHistory = [];
     appData.activeShipmentId = null;
     saveData(() => {
@@ -1210,9 +1341,7 @@ async function exportDiffReport() {
     else if (diff < 0) statusText = `少货 ${Math.abs(diff)} 件`;
     else if (diff > 0) statusText = `多货 ${diff} 件`;
 
-    const row = ws.addRow({
-      code, name, locs, plan, rec, diff, status: statusText
-    });
+    const row = ws.addRow({ code, name, locs, plan, rec, diff, status: statusText });
 
     if (statusText.includes('少货')) {
       row.getCell('status').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
