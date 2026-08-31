@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>店铺出入库盘点与库位系统 (含蓝牙标签打印)</title>
+  <title>店铺出入库盘点与库位系统 (含摄像头扫码与蓝牙打印)</title>
   
   <!-- Excel 库 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- HTML5 摄像头扫码库 -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -95,9 +98,10 @@
     .bind-box { background: #f3e8ff; border: 2px dashed #9333ea; padding: 14px; border-radius: 10px; margin-bottom: 12px; }
     .pending-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; background: white; border-radius: 8px; border: 1px solid #e9d5ff; min-height: 45px; align-items: center; }
 
-    /* 蓝牙打印专属样式 */
+    /* 蓝牙打印 & 摄像头样式 */
     .print-box { background: #f0fdf4; border: 2px dashed #16a34a; padding: 16px; border-radius: 10px; margin-bottom: 12px; }
     .label-preview { background: white; border: 2px solid #111827; width: 220px; height: 130px; margin: 10px auto; padding: 8px; text-align: center; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; justify-content: space-between; }
+    #reader { width: 100%; max-width: 320px; margin: 10px auto; border-radius: 10px; overflow: hidden; display: none; }
 
     @media(max-width: 640px) { 
       .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } 
@@ -246,7 +250,7 @@
     </div>
   </div>
 
-  <!-- STEP 5: 新增 - 蓝牙便携打印机 & 扫码即打印页面 -->
+  <!-- STEP 5: 蓝牙便携打印机 & 手机摄像头扫码打印页面 -->
   <div id="step5" class="card hidden">
     <div class="title">
       <span>步骤三：扫码自动打印 SKU 标签</span>
@@ -268,8 +272,16 @@
         </div>
       </div>
 
+      <!-- 摄像头扫码控制区域 -->
+      <div style="text-align:center; margin-bottom:12px;">
+        <button class="btn-blue" id="btnToggleCamera" style="padding:10px 20px;" onclick="toggleCameraScanner()">📷 打开手机摄像头扫码</button>
+      </div>
+      
+      <!-- 摄像头视频渲染容器 -->
+      <div id="reader"></div>
+
       <div class="scan-area">
-        <input type="text" id="printScanInput" class="scan-input" placeholder="扫码枪扫描条码/SKU，立即打印标签..." autocomplete="off">
+        <input type="text" id="printScanInput" class="scan-input" placeholder="摄像头扫码 / 扫码枪扫描，立即打印标签..." autocomplete="off">
         <button class="btn-green" onclick="triggerScanPrint()">🖨️ 打印标签</button>
       </div>
 
@@ -429,6 +441,10 @@ let printLogHistory = [];
 // 蓝牙打印机连接对象
 let bluetoothDevice = null;
 let printCharacteristic = null;
+
+// 摄像头扫码器实例
+let html5QrcodeScanner = null;
+let isCameraActive = false;
 
 let appData = {
   masterSkuList: [],
@@ -614,6 +630,8 @@ function playAudioNotice(type = 'ok') {
 }
 
 function switchStep(step) {
+  if (isCameraActive) stopCamera(); // 切换Tab时关闭摄像头防挂后台
+
   [1, 2, 3, 4, 5].forEach(i => {
     document.getElementById(`step${i}`).classList.toggle('hidden', i !== step);
     document.getElementById(`tab${i}`).classList.toggle('active', i === step);
@@ -628,7 +646,7 @@ function switchStep(step) {
 
 async function connectBluetoothPrinter() {
   if (!navigator.bluetooth) {
-    alert('您的浏览器或设备不支持 Web Bluetooth 功能！请使用 Android 手机上的 Chrome 浏览器。');
+    alert('您的浏览器或设备不支持 Web Bluetooth 功能！iOS 设备请在 App Store 下载【Bluefy】免费浏览器打开。');
     return;
   }
 
@@ -666,12 +684,61 @@ async function connectBluetoothPrinter() {
   }
 }
 
-// 扫码触发打印逻辑
+// 📷 手机摄像头扫码控制逻辑
+function toggleCameraScanner() {
+  if (isCameraActive) {
+    stopCamera();
+  } else {
+    startCamera();
+  }
+}
+
+function startCamera() {
+  const readerEl = document.getElementById('reader');
+  const btn = document.getElementById('btnToggleCamera');
+  readerEl.style.display = 'block';
+
+  html5QrcodeScanner = new Html5Qrcode("reader");
+  const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+  html5QrcodeScanner.start(
+    { facingMode: "environment" }, // 优先使用后置摄像头
+    config,
+    (decodedText) => {
+      // 扫码成功回调
+      document.getElementById('printScanInput').value = decodedText;
+      triggerScanPrint();
+    },
+    (errorMessage) => {
+      // 忽略持续侦测中的提示
+    }
+  ).then(() => {
+    isCameraActive = true;
+    btn.textContent = '❌ 关闭手机摄像头';
+    btn.className = 'btn-red';
+  }).catch(err => {
+    showMsg('无法打开摄像头，请确保已授予摄像头访问权限！', 'bad');
+    readerEl.style.display = 'none';
+  });
+}
+
+function stopCamera() {
+  if (html5QrcodeScanner && isCameraActive) {
+    html5QrcodeScanner.stop().then(() => {
+      document.getElementById('reader').style.display = 'none';
+      const btn = document.getElementById('btnToggleCamera');
+      btn.textContent = '📷 打开手机摄像头扫码';
+      btn.className = 'btn-blue';
+      isCameraActive = false;
+    }).catch(err => console.error(err));
+  }
+}
+
+// 扫码/识别触发打印逻辑
 function triggerScanPrint() {
   const input = document.getElementById('printScanInput');
   const code = input.value.trim();
   input.value = '';
-  input.focus();
 
   if (!code) return;
 
@@ -718,7 +785,6 @@ async function executePrint(code, name, locs, copies = 1) {
   try {
     for (let c = 0; c < copies; c++) {
       let encoder = new TextEncoder();
-      // ESC/POS 指令集初始化
       let cmds = [
         0x1B, 0x40,             // 初始化打印机
         0x1B, 0x61, 0x01,       // 居中对齐
@@ -727,7 +793,7 @@ async function executePrint(code, name, locs, copies = 1) {
         ...encoder.encode(`${code}\n`), // 打印 SKU
         0x1D, 0x21, 0x00,       // 还原字体
         ...encoder.encode(`LOCATION: ${locs}\n\n\n`), // 打印货架号并走纸
-        0x1D, 0x56, 0x42, 0x00  // 切纸 (视设备支持)
+        0x1D, 0x56, 0x42, 0x00  // 切纸
       ];
 
       await printCharacteristic.writeValue(new Uint8Array(cmds));
