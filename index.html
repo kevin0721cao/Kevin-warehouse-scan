@@ -3,14 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>店铺出入库盘点系统 (多端同步版)</title>
+  <title>店铺出入库盘点与库位绑定系统 (多端同步版)</title>
   
-  <!-- Excel 库 -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -18,8 +16,8 @@
   <style>
     :root {
       --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
-      --primary: #111827; --blue: #2563eb; --green: #16a34a; --red: #dc2626; --warn: #d97706;
-      --okbg: #dcfce7; --badbg: #fee2e2; --warnbg: #fef3c7; --bluebg: #dbeafe;
+      --primary: #111827; --blue: #2563eb; --green: #16a34a; --red: #dc2626; --warn: #d97706; --purple: #7c3aed;
+      --okbg: #dcfce7; --badbg: #fee2e2; --warnbg: #fef3c7; --bluebg: #dbeafe; --purplebg: #f3e8ff;
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
@@ -37,13 +35,13 @@
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     
-    .step-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-    .tab-btn { border: none; padding: 12px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); }
+    .step-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+    .tab-btn { border: none; padding: 10px 4px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); font-size: 13px; }
     .tab-btn.active { background: var(--blue); color: white; }
 
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .scan-area { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
-    .scan-input { font-size: 20px!important; font-weight: 800; padding: 10px; width: 100%; border: 2px solid #3b82f6; border-radius: 10px; }
+    .scan-input { font-size: 18px!important; font-weight: 800; padding: 10px; width: 100%; border: 2px solid #3b82f6; border-radius: 10px; }
     
     input[type=text], input[type=email], input[type=password], input[type=file], select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
     button { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -52,6 +50,7 @@
     .btn-blue { background: var(--blue); color: white; }
     .btn-green { background: var(--green); color: white; }
     .btn-red { background: var(--red); color: white; }
+    .btn-purple { background: var(--purple); color: white; }
     .btn-gray { background: #e5e7eb; color: #111827; }
 
     table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
@@ -59,12 +58,13 @@
     th { background: #f8fafc; color: var(--muted); position: sticky; top: 0; }
     .table-wrap { overflow-x: auto; max-height: 400px; border: 1px solid var(--line); border-radius: 8px; }
 
-    .badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    .badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; display: inline-block; }
     .badge-gray { background: #e5e7eb; color: #374151; }
     .badge-blue { background: var(--bluebg); color: var(--blue); }
     .badge-green { background: var(--okbg); color: var(--green); }
     .badge-red { background: var(--badbg); color: var(--red); }
     .badge-warn { background: var(--warnbg); color: var(--warn); }
+    .badge-purple { background: var(--purplebg); color: var(--purple); margin: 2px; }
 
     .message { padding: 10px 14px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; display: none; }
     .message.show { display: block; }
@@ -87,12 +87,20 @@
 
     .hidden { display: none !important; }
     .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
-    @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } }
+    
+    /* 货架绑定页面专用样式 */
+    .bind-box { background: #f3e8ff; border: 2px dashed #9333ea; padding: 14px; border-radius: 10px; margin-bottom: 12px; }
+    .bind-inputs { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
+
+    @media(max-width: 640px) { 
+      .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } 
+      .step-tabs { grid-template-columns: repeat(2, 1fr); }
+      .bind-inputs { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 
-<!-- 登录模态弹窗 -->
 <div id="authModal" class="modal-overlay">
   <div class="modal">
     <h2 id="authTitle">系统登录 / 注册</h2>
@@ -114,11 +122,10 @@
 <div class="app">
   <div class="header">
     <div>
-      <h1>店铺出入库盘点系统 (多端同步版)</h1>
-      <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 差异对照表</p>
+      <h1>店铺出入库盘点与库位系统</h1>
+      <p>基础SKU库 ➔ 货架位绑定 ➔ 国内发货 ➔ 海外盘点</p>
     </div>
     <div class="user-box">
-      <!-- 数据库连接状态 -->
       <span id="dbStatusTag" class="db-status">连接检查中...</span>
       <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
       
@@ -140,12 +147,12 @@
   <div id="msgBox" class="message"></div>
 
   <div class="step-tabs">
-    <button class="tab-btn active" id="tab1" onclick="switchStep(1)">1. 店铺 SKU 基础库</button>
-    <button class="tab-btn" id="tab2" onclick="switchStep(2)">2. 国内发货(扫码/导入)</button>
-    <button class="tab-btn" id="tab3" onclick="switchStep(3)">3. 海外收货盘点</button>
+    <button class="tab-btn active" id="tab1" onclick="switchStep(1)">1. SKU 基础库</button>
+    <button class="tab-btn" id="tab4" onclick="switchStep(4)">2. 货架位绑定 (多库位)</button>
+    <button class="tab-btn" id="tab2" onclick="switchStep(2)">3. 国内发货清单</button>
+    <button class="tab-btn" id="tab3" onclick="switchStep(3)">4. 海外收货盘点</button>
   </div>
 
-  <!-- STEP 1: SKU基础库导入 -->
   <div id="step1" class="card">
     <div class="title">
       <span>步骤一：上传店铺 SKU 基础库</span>
@@ -157,7 +164,7 @@
       <input type="file" id="skuMasterFile" accept=".xlsx,.xls,.csv">
       <div style="display:flex; gap:8px;">
         <button class="btn-green" style="flex:1;" onclick="manualSaveMasterSku()">💾 保存/同步商品库至云端</button>
-        <button class="btn-red" onclick="clearMasterSku()">🗑️ 清空商品库</button>
+        <button class="btn-red" onclick="clearMasterSku()">清空商品库</button>
       </div>
     </div>
 
@@ -173,10 +180,41 @@
     </div>
   </div>
 
-  <!-- STEP 2: 国内发货 -->
+  <div id="step4" class="card hidden">
+    <div class="title">
+      <span>步骤二：货架位绑定 (支持一商品多货架 & 重复语音提醒)</span>
+      <span class="badge badge-purple" id="boundCountBadge">已绑定 0 个库位映射</span>
+    </div>
+
+    <div class="bind-box">
+      <div style="font-weight: bold; font-size: 13px; margin-bottom: 8px; color: var(--purple);">扫码或输入绑定 (商品可绑定多个货架，重复绑定将语音提示)：</div>
+      <div class="bind-inputs">
+        <input type="text" id="bindSkuInput" class="scan-input" placeholder="1. 扫描/输入 商品SKU码..." autocomplete="off">
+        <input type="text" id="bindLocationInput" class="scan-input" placeholder="2. 扫描/输入 货架编号(如 A-01)..." autocomplete="off">
+        <button class="btn-purple" onclick="handleBindLocation()">确认绑定货架</button>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-bottom: 8px;">
+      <input type="text" id="searchBindInput" placeholder="🔍 搜索 SKU 或 货架号..." oninput="renderLocationTable()">
+      <button class="btn-red" style="justify-self: flex-end;" onclick="clearAllLocations()">🗑️ 清空所有库位绑定</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>SKU码</th><th>商品名称</th><th>已绑定的货架库位列表 (点击可删除单个)</th></tr>
+        </thead>
+        <tbody id="locationTable">
+          <tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无货架绑定数据</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <div id="step2" class="card hidden">
     <div class="title">
-      <span>步骤二：国内发货生成（支持 Excel 导入或扫码）</span>
+      <span>步骤三：国内发货生成（支持 Excel 导入或扫码）</span>
       <span class="badge badge-blue" id="shipStatusBadge">待生成发货单</span>
     </div>
 
@@ -202,10 +240,10 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>SKU码</th><th>商品名称</th><th>发货数量</th><th>操作</th></tr>
+          <tr><th>SKU码</th><th>商品名称</th><th>对应货架位</th><th>发货数量</th><th>操作</th></tr>
         </thead>
         <tbody id="shipTable">
-          <tr><td colspan="4" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>
+          <tr><td colspan="5" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>
         </tbody>
       </table>
     </div>
@@ -216,10 +254,9 @@
     </div>
   </div>
 
-  <!-- STEP 3: 海外收货盘点 -->
   <div id="step3" class="card hidden">
     <div class="title">
-      <span>步骤三：海外收货扫描与差异对比</span>
+      <span>步骤四：海外收货扫描与差异对比</span>
       <span class="badge badge-warn" id="receiveStatusBadge">等待选择发货单</span>
     </div>
 
@@ -250,10 +287,10 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>SKU码</th><th>商品名称</th><th>应收(国内发)</th><th>实收(海外盘)</th><th>差异</th><th>状态</th></tr>
+          <tr><th>SKU码</th><th>商品名称</th><th>货架位</th><th>应收(国内发)</th><th>实收(海外盘)</th><th>差异</th><th>状态</th></tr>
         </thead>
         <tbody id="receiveTable">
-          <tr><td colspan="6" style="text-align:center; color:var(--muted);">请先选择发货单并点击“开始收货扫描”</td></tr>
+          <tr><td colspan="7" style="text-align:center; color:var(--muted);">请先选择发货单并点击“开始收货扫描”</td></tr>
         </tbody>
       </table>
     </div>
@@ -284,7 +321,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 
-// 实时监测 Firebase 连接状态
+// 监测 Firebase 连接状态
 db.ref('.info/connected').on('value', snap => {
   const statusTag = document.getElementById('dbStatusTag');
   if (snap.val() === true) {
@@ -303,6 +340,7 @@ let allUsersMap = {};
 
 let appData = {
   masterSkuList: [],
+  locationMap: {}, // 格式: { "SKU001": ["A-01", "B-02"] }
   currentShipment: {},
   shipmentHistory: [],
   activeShipmentId: null
@@ -380,7 +418,7 @@ function switchTargetUser() {
   bindDataListener(targetUid);
 }
 
-// 核心：实现电脑与手机端实时数据绑定
+// 核心：绑定实时监听，实现手机电脑多端同步
 function bindDataListener(uid) {
   if (dataRef) dataRef.off();
 
@@ -389,13 +427,15 @@ function bindDataListener(uid) {
     const val = snapshot.val();
     if (val) {
       appData.masterSkuList = val.masterSkuList || [];
+      appData.locationMap = val.locationMap || {};
       appData.currentShipment = val.currentShipment || {};
       appData.shipmentHistory = val.shipmentHistory || [];
       appData.activeShipmentId = val.activeShipmentId || null;
     } else {
-      appData = { masterSkuList: [], currentShipment: {}, shipmentHistory: [], activeShipmentId: null };
+      appData = { masterSkuList: [], locationMap: {}, currentShipment: {}, shipmentHistory: [], activeShipmentId: null };
     }
     renderMasterSku();
+    renderLocationTable();
     renderShipTable();
     updateShipmentSelect();
     if (appData.activeShipmentId) {
@@ -467,6 +507,22 @@ function showMsg(text, type = 'ok') {
   box.timer = setTimeout(() => box.className = 'message', 4000);
 }
 
+// 蜂鸣音效 + 原生语音播报（重复提醒）
+function speakRepeatWarning() {
+  // 1. 播放长警报声音
+  playAudioNotice('repeat');
+  
+  // 2. 语音播报“重复”
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // 停止前面的语音
+    const msg = new SpeechSynthesisUtterance('重复');
+    msg.lang = 'zh-CN';
+    msg.rate = 1.1; // 稍微加快语速
+    msg.volume = 1.0;
+    window.speechSynthesis.speak(msg);
+  }
+}
+
 function playAudioNotice(type = 'ok') {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -474,11 +530,21 @@ function playAudioNotice(type = 'ok') {
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
+    
     if (type === 'ok') {
       osc.frequency.value = 880;
       gain.gain.value = 0.1;
       osc.start();
       osc.stop(ctx.currentTime + 0.1);
+    } else if (type === 'repeat') {
+      // 重复时的三连蜂鸣音
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(400, ctx.currentTime);
+      osc.frequency.setValueAtTime(800, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(400, ctx.currentTime + 0.2);
+      gain.gain.value = 0.3;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
     } else {
       osc.frequency.value = 300;
       gain.gain.value = 0.2;
@@ -489,13 +555,145 @@ function playAudioNotice(type = 'ok') {
 }
 
 function switchStep(step) {
-  [1, 2, 3].forEach(i => {
+  [1, 2, 3, 4].forEach(i => {
     document.getElementById(`step${i}`).classList.toggle('hidden', i !== step);
     document.getElementById(`tab${i}`).classList.toggle('active', i === step);
   });
+  if(step === 4) setTimeout(() => document.getElementById('bindSkuInput').focus(), 100);
   if(step === 2) setTimeout(() => document.getElementById('shipScanInput').focus(), 100);
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
+
+// ------------------- 新增：货架库位绑定逻辑 ------------------- //
+
+function handleBindLocation() {
+  const skuInput = document.getElementById('bindSkuInput');
+  const locInput = document.getElementById('bindLocationInput');
+  
+  const code = skuInput.value.trim();
+  const location = locInput.value.trim().toUpperCase();
+
+  if (!code || !location) {
+    showMsg('请输入或扫描 SKU码 和 货架编号！', 'warn');
+    return;
+  }
+
+  if (!appData.locationMap) appData.locationMap = {};
+  if (!appData.locationMap[code]) appData.locationMap[code] = [];
+
+  const existingLocations = appData.locationMap[code];
+
+  // 校验是否重复绑定同一货架
+  if (existingLocations.includes(location)) {
+    speakRepeatWarning(); // 触发中文语音“重复”与音效
+    showMsg(`⚠️ 警告：SKU【${code}】已绑定过货架【${location}】，请勿重复绑定！`, 'bad');
+    skuInput.value = '';
+    locInput.value = '';
+    skuInput.focus();
+    return;
+  }
+
+  // 新增绑定
+  appData.locationMap[code].push(location);
+  saveData();
+
+  const master = appData.masterSkuList.find(x => x.code === code);
+  const name = master ? master.name : code;
+
+  showMsg(`✅ 成功将商品【${name}】绑定至新货架【${location}】！`, 'ok');
+  playAudioNotice('ok');
+
+  skuInput.value = '';
+  locInput.value = '';
+  skuInput.focus();
+  renderLocationTable();
+}
+
+// 输入框键盘回车监听
+document.getElementById('bindSkuInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('bindLocationInput').focus(); }
+});
+document.getElementById('bindLocationInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); handleBindLocation(); }
+});
+
+function removeSingleLocation(code, loc) {
+  if (!appData.locationMap || !appData.locationMap[code]) return;
+  appData.locationMap[code] = appData.locationMap[code].filter(l => l !== loc);
+  if (appData.locationMap[code].length === 0) {
+    delete appData.locationMap[code];
+  }
+  saveData();
+  renderLocationTable();
+  showMsg(`已解绑库位 ${loc}`, 'warn');
+}
+
+function clearAllLocations() {
+  if (confirm('⚠️ 确定要清空所有的货架位绑定记录吗？')) {
+    appData.locationMap = {};
+    saveData();
+    renderLocationTable();
+    showMsg('货架绑定库已全部清空！', 'warn');
+  }
+}
+
+function renderLocationTable() {
+  const tbody = document.getElementById('locationTable');
+  const search = (document.getElementById('searchBindInput').value || '').trim().toLowerCase();
+  const map = appData.locationMap || {};
+  const codes = Object.keys(map);
+
+  let totalBoundEntries = 0;
+  codes.forEach(c => totalBoundEntries += map[c].length);
+  document.getElementById('boundCountBadge').textContent = `已绑定 ${totalBoundEntries} 个库位映射`;
+
+  if (codes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无货架绑定数据</td></tr>`;
+    return;
+  }
+
+  const filteredCodes = codes.filter(code => {
+    const master = appData.masterSkuList.find(x => x.code === code);
+    const name = master ? master.name : '';
+    const locs = map[code].join(' ');
+    return code.toLowerCase().includes(search) || name.toLowerCase().includes(search) || locs.toLowerCase().includes(search);
+  });
+
+  if (filteredCodes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--muted);">未找到匹配的绑定记录</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filteredCodes.map(code => {
+    const master = appData.masterSkuList.find(x => x.code === code);
+    const name = master ? master.name : `<span style="color:var(--muted);">未知商品</span>`;
+    const locs = map[code] || [];
+
+    const locBadges = locs.map(loc => `
+      <span class="badge badge-purple">
+        ${loc} 
+        <b style="cursor:pointer; margin-left:4px; color:var(--red);" onclick="removeSingleLocation('${code}', '${loc}')">×</b>
+      </span>
+    `).join(' ');
+
+    return `
+      <tr>
+        <td><b>${code}</b></td>
+        <td>${name}</td>
+        <td>${locBadges}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// 辅助工具：获取某个 SKU 绑定的所有货架文案
+function getLocationTags(code) {
+  const locs = (appData.locationMap && appData.locationMap[code]) ? appData.locationMap[code] : [];
+  if (locs.length === 0) return '<span style="color:var(--muted); font-size:11px;">未绑定货架</span>';
+  return locs.map(l => `<span class="badge badge-purple">${l}</span>`).join(' ');
+}
+
+// ------------------- STEP 1 & STEP 2 & STEP 3 逻辑保留 ------------------- //
 
 // SKU 基础库解析
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
@@ -564,7 +762,6 @@ function renderMasterSku() {
   `).join('');
 }
 
-// 【数据删除功能 1】：清空基础 SKU 库
 function clearMasterSku() {
   if (confirm('⚠️ 确定要清空本店铺的 SKU 基础库吗？清空后多端将同步彻底删除！')) {
     appData.masterSkuList = [];
@@ -661,7 +858,6 @@ function removeShipItem(code) {
   renderShipTable();
 }
 
-// 【数据删除功能 2】：重置/清空国内发货表
 function clearShipList() {
   if (confirm('⚠️ 确定要清空当前的国内发货草稿列表吗？')) {
     appData.currentShipment = {};
@@ -682,7 +878,7 @@ function renderShipTable() {
   document.getElementById('shipTotalQty').textContent = totalQty;
 
   if (codes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--muted);">请上传国内发货 Excel 或扫描条码填充发货清单</td></tr>`;
     return;
   }
 
@@ -690,10 +886,13 @@ function renderShipTable() {
     const master = appData.masterSkuList.find(x => x.code === code);
     const name = master ? master.name : `<span style="color:var(--red);">基础库未找到此SKU</span>`;
     const qty = appData.currentShipment[code];
+    const locTags = getLocationTags(code);
+
     return `
       <tr>
         <td><b>${code}</b></td>
         <td>${name}</td>
+        <td>${locTags}</td>
         <td>
           <input type="number" min="1" value="${qty}" style="width:100px; padding:6px; font-weight:bold;" onchange="updateShipQty('${code}', this.value)">
         </td>
@@ -751,7 +950,7 @@ function loadShipmentForReceive() {
     document.getElementById('btnStartReceive').disabled = true;
     deleteBtn.disabled = true;
     document.getElementById('receiveScanArea').classList.add('hidden');
-    document.getElementById('receiveTable').innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--muted);">请先选择发货单</td></tr>`;
+    document.getElementById('receiveTable').innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--muted);">请先选择发货单</td></tr>`;
     return;
   }
 
@@ -838,6 +1037,7 @@ function renderReceiveTable() {
 
     const master = appData.masterSkuList.find(x => x.code === code);
     const name = master ? master.name : (plan > 0 ? code : '<span style="color:var(--warn)">发货单以外商品</span>');
+    const locTags = getLocationTags(code);
 
     let statusTag = '<span class="badge badge-green">数量一致</span>';
     if (plan === 0 && rec > 0) statusTag = '<span class="badge badge-warn">多出/清单外</span>';
@@ -848,6 +1048,7 @@ function renderReceiveTable() {
       <tr>
         <td><b>${code}</b></td>
         <td>${name}</td>
+        <td>${locTags}</td>
         <td>${plan}</td>
         <td><b>${rec}</b></td>
         <td style="color:${diff < 0 ? 'var(--red)' : (diff > 0 ? 'var(--warn)' : 'var(--green)')}">${diff > 0 ? '+' + diff : diff}</td>
@@ -860,10 +1061,9 @@ function renderReceiveTable() {
   document.getElementById('recScannedQty').textContent = recSum;
   document.getElementById('recDiffQty').textContent = diffSum;
 
-  document.getElementById('receiveTable').innerHTML = html || `<tr><td colspan="6" style="text-align:center; color:var(--muted);">发货单无数据</td></tr>`;
+  document.getElementById('receiveTable').innerHTML = html || `<tr><td colspan="7" style="text-align:center; color:var(--muted);">发货单无数据</td></tr>`;
 }
 
-// 【数据删除功能 3】：删除选中的单条发货批次
 function deleteCurrentShipment() {
   const shipId = appData.activeShipmentId;
   if (!shipId) return;
@@ -879,7 +1079,6 @@ function deleteCurrentShipment() {
   }
 }
 
-// 【数据删除功能 4】：清空所有历史发货批次（重置任务）
 function clearAllShipments() {
   if (confirm('⚠️ 警告：确定要彻底重置/清空【所有发货批次与收货盘点历史】吗？\n这是针对新客户全新任务的重置功能。')) {
     appData.shipmentHistory = [];
@@ -903,6 +1102,7 @@ async function exportDiffReport() {
   ws.columns = [
     { header: 'SKU码', key: 'code', width: 22 },
     { header: '商品名称', key: 'name', width: 35 },
+    { header: '货架库位', key: 'locs', width: 20 },
     { header: '国内发货数量', key: 'plan', width: 15 },
     { header: '海外实收数量', key: 'rec', width: 15 },
     { header: '数量差异', key: 'diff', width: 12 },
@@ -919,6 +1119,7 @@ async function exportDiffReport() {
     const diff = rec - plan;
     const master = appData.masterSkuList.find(x => x.code === code);
     const name = master ? master.name : (plan > 0 ? code : '发货单以外商品');
+    const locs = (appData.locationMap && appData.locationMap[code]) ? appData.locationMap[code].join(', ') : '未绑定';
 
     let statusText = '相符';
     if (plan === 0 && rec > 0) statusText = '清单外货品';
@@ -926,7 +1127,7 @@ async function exportDiffReport() {
     else if (diff > 0) statusText = `多货 ${diff} 件`;
 
     const row = ws.addRow({
-      code, name, plan, rec, diff, status: statusText
+      code, name, locs, plan, rec, diff, status: statusText
     });
 
     if (statusText.includes('少货')) {
