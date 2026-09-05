@@ -10,6 +10,9 @@
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+  <!-- 条形码生成库 JsBarcode -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"></script>
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
@@ -37,8 +40,8 @@
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     
-    .step-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-    .tab-btn { border: none; padding: 12px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); }
+    .step-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    .tab-btn { border: none; padding: 12px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); text-align: center; }
     .tab-btn.active { background: var(--blue); color: white; }
 
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -85,9 +88,72 @@
     .modal .form-group { margin-bottom: 12px; }
     .modal label { font-size: 12px; font-weight: bold; color: var(--muted); display: block; margin-bottom: 4px; }
 
+    /* 打印标签专用卡片样式 */
+    .print-card-box {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      background: #fafafa;
+      margin-top: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .print-label {
+      background: white;
+      border: 1px solid #000;
+      padding: 12px;
+      width: 320px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      border-radius: 6px;
+      text-align: center;
+    }
+    .print-label .sku-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+    .print-label .sku-name {
+      font-size: 13px;
+      color: #374151;
+      margin-bottom: 8px;
+      word-break: break-all;
+      max-height: 38px;
+      overflow: hidden;
+    }
+    .print-label svg {
+      width: 100%!important;
+      height: 90px!important;
+    }
+
     .hidden { display: none !important; }
     .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
-    @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } }
+    @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } .step-tabs { grid-template-columns: 1fr 1fr; } }
+
+    /* 针对便携式热敏打印机的打印样式优化 */
+    @media print {
+      body * { visibility: hidden; }
+      #printableArea, #printableArea * { visibility: visible; }
+      #printableArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 4mm;
+        box-shadow: none;
+        border: none;
+      }
+      .print-label {
+        width: 100%!important;
+        border: none!important;
+        padding: 0!important;
+      }
+      @page { margin: 0; size: auto; }
+    }
   </style>
 </head>
 <body>
@@ -115,10 +181,9 @@
   <div class="header">
     <div>
       <h1>店铺出入库盘点系统 (超级管理员版)</h1>
-      <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 差异对照表</p>
+      <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 便携标签打印</p>
     </div>
     <div class="user-box">
-      <!-- 数据库连接状态 -->
       <span id="dbStatusTag" class="db-status">连接检查中...</span>
       <span id="userStatusText" style="font-size:13px; color:#e5e7eb;">未登录</span>
       
@@ -143,6 +208,7 @@
     <button class="tab-btn active" id="tab1" onclick="switchStep(1)">1. 店铺 SKU 基础库</button>
     <button class="tab-btn" id="tab2" onclick="switchStep(2)">2. 国内发货(扫码/导入)</button>
     <button class="tab-btn" id="tab3" onclick="switchStep(3)">3. 海外收货盘点</button>
+    <button class="tab-btn" id="tab4" onclick="switchStep(4)">4. 便携大标签打印 🖨️</button>
   </div>
 
   <!-- STEP 1: SKU基础库导入 -->
@@ -151,7 +217,7 @@
       <span>步骤一：上传店铺 SKU 基础库</span>
       <span class="badge badge-gray" id="masterSkuCount">已导入 0 个 SKU</span>
     </div>
-    <p style="font-size: 13px; color: var(--muted);">选择包含店铺商品的 Excel 文件（表头包含：<b>SKU码</b>、<b>商品名称</b>），读取后点击右侧按钮保存同步。</p>
+    <p style="font-size: 13px; color: var(--muted);">选择包含店铺商品的 Excel 文件（表头包含：<b>SKU码</b>、<b>商品名称</b>、<b>库位号</b>【可选】），读取后点击右侧按钮保存同步。</p>
     
     <div class="grid2" style="margin-bottom: 12px;">
       <input type="file" id="skuMasterFile" accept=".xlsx,.xls,.csv">
@@ -161,13 +227,22 @@
       </div>
     </div>
 
+    <!-- 新增绑定库位功能 -->
+    <div class="import-box" style="margin-top:10px; background:#eff6ff; border-color:#93c5fd;">
+      <div style="font-weight: bold; font-size: 13px; margin-bottom: 6px; color: var(--blue);">📍 扫码绑定/更替换库位：</div>
+      <div class="grid2">
+        <input type="text" id="locationInput" placeholder="1. 扫描或输入库位号 (如: A-01-02)" style="font-weight:bold;">
+        <input type="text" id="skuBindInput" placeholder="2. 扫描SKU条码进行绑定" style="font-weight:bold;">
+      </div>
+    </div>
+
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>序号</th><th>SKU码</th><th>商品名称</th></tr>
+          <tr><th>序号</th><th>SKU码</th><th>商品名称</th><th>绑定库位号</th></tr>
         </thead>
         <tbody id="masterSkuTable">
-          <tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>
+          <tr><td colspan="4" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>
         </tbody>
       </table>
     </div>
@@ -261,10 +336,40 @@
       <button class="btn-green" id="btnExportReport" onclick="exportDiffReport()" disabled>导出出入库对照盘点单 (Excel)</button>
     </div>
   </div>
+
+  <!-- STEP 4: 便携式放大标签打印 -->
+  <div id="step4" class="card hidden">
+    <div class="title">
+      <span>步骤四：扫码即打大号 SKU 标签 (便携打印专用)</span>
+      <label style="font-size:13px; font-weight:normal; cursor:pointer; color:var(--blue);">
+        <input type="checkbox" id="autoPrintToggle" checked> 扫码后自动唤起打印
+      </label>
+    </div>
+
+    <p style="font-size: 13px; color: var(--muted);">扫描商品上的小 SKU 标签后，系统将自动检索商品名称并生成放大版条形码，适配蓝牙/便携热敏打印机直接打印。</p>
+
+    <div class="scan-area">
+      <input type="text" id="printScanInput" class="scan-input" placeholder="请用扫码枪/PDA扫描小标签条码..." autocomplete="off">
+      <button class="btn-blue" onclick="handlePrintScan()">生成标签</button>
+    </div>
+
+    <!-- 标签打印预览区 -->
+    <div class="print-card-box">
+      <div id="printableArea" class="print-label">
+        <div id="labelSkuName" class="sku-name">等待扫描商品 SKU 条码...</div>
+        <svg id="barcodeCanvas"></svg>
+        <div id="labelSkuCode" class="sku-title">----</div>
+      </div>
+      <div style="margin-top: 16px;">
+        <button class="btn-green" style="padding:10px 24px; font-size:15px;" onclick="triggerPrint()">🖨️ 立即打印大标签</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
-// Firebase 初始化配置（确保 4fU 大小写完全精确）
+// Firebase 配置
 const firebaseConfig = {
   apiKey: "AIzaSyDWjeO8PG4fuTkAbfXVq_rsrt0I2KL1Yow",
   authDomain: "kevin-warehouse.firebaseapp.com",
@@ -276,14 +381,12 @@ const firebaseConfig = {
   measurementId: "G-256372QNRC"
 };
 
-// 填入你作为超级管理员的完整邮箱地址
 const ADMIN_EMAIL = "caoxiao0721@gmail.com";
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 
-// 实时监测 Firebase 连接状态指示灯
 db.ref('.info/connected').on('value', snap => {
   const statusTag = document.getElementById('dbStatusTag');
   if (snap.val() === true) {
@@ -307,7 +410,6 @@ let appData = {
   activeShipmentId: null
 };
 
-// 监听登录状态
 auth.onAuthStateChanged(user => {
   if (user) {
     currentUser = user;
@@ -463,17 +565,7 @@ function showMsg(text, type = 'ok') {
   box.timer = setTimeout(() => box.className = 'message', 4000);
 }
 
-// 语音播报函数（TTS）
-function speak(text) {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // 停止当前排队的播报
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 1.2; // 稍快的语速适合扫码场景
-    window.speechSynthesis.speak(utterance);
-  }
-}
-
+// 蜂鸣声音提示
 function playAudioNotice(type = 'ok') {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -495,14 +587,65 @@ function playAudioNotice(type = 'ok') {
   } catch(e) {}
 }
 
+// 语音播报中文函数 TTS
+function speakText(text) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // 停止上一句，保证播报实时性
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'zh-CN';
+    utter.rate = 1.1; // 播报语速略微加快以提高效率
+    window.speechSynthesis.speak(utter);
+  }
+}
+
 function switchStep(step) {
-  [1, 2, 3].forEach(i => {
+  [1, 2, 3, 4].forEach(i => {
     document.getElementById(`step${i}`).classList.toggle('hidden', i !== step);
     document.getElementById(`tab${i}`).classList.toggle('active', i === step);
   });
   if(step === 2) setTimeout(() => document.getElementById('shipScanInput').focus(), 100);
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
+  if(step === 4) setTimeout(() => document.getElementById('printScanInput').focus(), 100);
 }
+
+// 绑定库位扫描逻辑
+document.getElementById('skuBindInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const location = document.getElementById('locationInput').value.trim();
+    const code = this.value.trim();
+    this.value = '';
+
+    if (!location) {
+      showMsg('请先输入或扫描库位号！', 'bad');
+      speakText('请输入库位号');
+      return;
+    }
+    if (!code) return;
+
+    let item = appData.masterSkuList.find(x => x.code === code);
+    if (!item) {
+      item = { code, name: code, location };
+      appData.masterSkuList.push(item);
+      showMsg(`新建SKU并绑定库位: ${location}`, 'ok');
+      speakText('绑定成功');
+    } else {
+      const isRepeat = item.location === location;
+      item.location = location;
+      if (isRepeat) {
+        showMsg(`[重复] SKU ${code} 已绑定该库位 ${location}`, 'warn');
+        speakText('重复，库位已存在');
+        playAudioNotice('bad');
+      } else {
+        showMsg(`SKU ${code} 已更新绑定至新库位: ${location}`, 'ok');
+        speakText('绑定成功');
+        playAudioNotice('ok');
+      }
+    }
+    saveData();
+    renderMasterSku();
+  }
+});
 
 // SKU 基础库解析
 document.getElementById('skuMasterFile').addEventListener('change', function(e) {
@@ -520,13 +663,16 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
       let count = 0;
       json.forEach(row => {
         const keys = Object.keys(row);
-        let name = '', code = '';
+        let name = '', code = '', location = '';
 
         const nameKey = keys.find(k => /商品名称|名称/i.test(k));
         if (nameKey) name = String(row[nameKey]).trim();
 
         const codeKey = keys.find(k => /SKU码|SKU编号|SKU|Barcode|条形码|条码|编码|Code/i.test(k));
         if (codeKey) code = String(row[codeKey]).trim();
+
+        const locKey = keys.find(k => /库位|货位|位置|Location/i.test(k));
+        if (locKey) location = String(row[locKey]).trim();
 
         if (!code) {
           const possibleCodes = Object.values(row).map(v => String(v).trim()).filter(v => /^[A-Za-z0-9_-]{4,30}$/.test(v));
@@ -539,8 +685,9 @@ document.getElementById('skuMasterFile').addEventListener('change', function(e) 
           const idx = appData.masterSkuList.findIndex(x => x.code === code);
           if (idx >= 0) {
             appData.masterSkuList[idx].name = name;
+            if (location) appData.masterSkuList[idx].location = location;
           } else {
-            appData.masterSkuList.push({ code, name });
+            appData.masterSkuList.push({ code, name, location });
           }
           count++;
         }
@@ -559,7 +706,7 @@ function renderMasterSku() {
   document.getElementById('masterSkuCount').textContent = `已导入 ${appData.masterSkuList.length} 个 SKU`;
   const tbody = document.getElementById('masterSkuTable');
   if (appData.masterSkuList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--muted);">暂无商品数据，请先上传店铺 SKU 基础库</td></tr>`;
     return;
   }
   tbody.innerHTML = appData.masterSkuList.map((item, index) => `
@@ -567,6 +714,7 @@ function renderMasterSku() {
       <td>${index + 1}</td>
       <td><b>${item.code}</b></td>
       <td>${item.name}</td>
+      <td><span class="badge ${item.location ? 'badge-blue' : 'badge-gray'}">${item.location || '未绑定'}</span></td>
     </tr>
   `).join('');
 }
@@ -627,7 +775,7 @@ function importShipmentExcel() {
   reader.readAsArrayBuffer(file);
 }
 
-// 国内发货/绑定库位扫描（含重复播报）
+// 国内发货扫描/编辑
 function handleShipScan() {
   const input = document.getElementById('shipScanInput');
   const code = input.value.trim();
@@ -636,10 +784,9 @@ function handleShipScan() {
 
   if (!code) return;
 
-  // 检查是否为重复扫描
   const isDuplicate = appData.currentShipment[code] !== undefined && appData.currentShipment[code] > 0;
-
   appData.currentShipment[code] = (appData.currentShipment[code] || 0) + 1;
+  const currentCount = appData.currentShipment[code];
   saveData();
   renderShipTable();
   
@@ -647,10 +794,12 @@ function handleShipScan() {
   const name = master ? master.name : '（未知SKU，建议补充进基础库）';
 
   if (isDuplicate) {
-    showMsg(`[重复扫描已加1] ${name} (当前累计: ${appData.currentShipment[code]})`, 'warn');
-    speak('重复');
+    showMsg(`[重复] ${name} (累计: ${currentCount} 件)`, 'warn');
+    speakText(`重复，当前累计${currentCount}件`);
+    playAudioNotice('bad');
   } else {
-    showMsg(`[已加1] ${name} (当前累计: ${appData.currentShipment[code]})`, 'ok');
+    showMsg(`[已加1] ${name} (当前累计: ${currentCount})`, 'ok');
+    speakText('扫描成功');
     playAudioNotice('ok');
   }
 }
@@ -793,7 +942,6 @@ function startReceiving() {
   setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
-// 海外收货扫描（含重复播报）
 function handleReceiveScan() {
   const input = document.getElementById('receiveScanInput');
   const code = input.value.trim();
@@ -807,23 +955,25 @@ function handleReceiveScan() {
 
   if (!shipment.receiveItems) shipment.receiveItems = {};
 
-  // 检查是否为重复收货扫描
   const isDuplicate = shipment.receiveItems[code] !== undefined && shipment.receiveItems[code] > 0;
-
   shipment.receiveItems[code] = (shipment.receiveItems[code] || 0) + 1;
+  const currentRec = shipment.receiveItems[code];
   saveData();
 
   const isExpected = shipment.items[code] !== undefined;
 
-  if (isDuplicate) {
-    showMsg(`[重复扫码实收+1]: ${code}`, 'warn');
-    speak('重复');
-  } else if (isExpected) {
-    showMsg(`[实收+1] 扫描成功: ${code}`, 'ok');
-    playAudioNotice('ok');
-  } else {
+  if (!isExpected) {
     showMsg(`[警告] 扫描到国内发货单以外的商品: ${code}`, 'warn');
+    speakText('警告，清单外商品');
     playAudioNotice('bad');
+  } else if (isDuplicate) {
+    showMsg(`[重复收货] SKU: ${code} (已实收: ${currentRec} 件)`, 'warn');
+    speakText(`重复，已实收${currentRec}件`);
+    playAudioNotice('bad');
+  } else {
+    showMsg(`[实收+1] 扫描成功: ${code}`, 'ok');
+    speakText('收货成功');
+    playAudioNotice('ok');
   }
 
   renderReceiveTable();
@@ -936,6 +1086,56 @@ async function exportDiffReport() {
   saveData();
   updateShipmentSelect();
   showMsg('差异对照表导出成功！', 'ok');
+}
+
+// STEP 4: 标签即扫即打印逻辑
+function handlePrintScan() {
+  const input = document.getElementById('printScanInput');
+  const code = input.value.trim();
+  input.value = '';
+  input.focus();
+
+  if (!code) return;
+
+  const master = appData.masterSkuList.find(x => x.code === code);
+  const name = master ? master.name : '（未匹配到基础库名称）';
+
+  document.getElementById('labelSkuName').textContent = name;
+  document.getElementById('labelSkuCode').textContent = code;
+
+  try {
+    JsBarcode("#barcodeCanvas", code, {
+      format: "CODE128",
+      displayValue: false,
+      margin: 0,
+      width: 2.5,
+      height: 70
+    });
+    playAudioNotice('ok');
+    speakText('标签生成成功');
+    showMsg(`标签已生成: ${code}`, 'ok');
+
+    if (document.getElementById('autoPrintToggle').checked) {
+      setTimeout(() => triggerPrint(), 200);
+    }
+  } catch (err) {
+    showMsg('条码生成失败，请确认条码字符合规', 'bad');
+    playAudioNotice('bad');
+    speakText('条码错误');
+  }
+}
+
+document.getElementById('printScanInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); handlePrintScan(); }
+});
+
+function triggerPrint() {
+  const code = document.getElementById('labelSkuCode').textContent;
+  if (code === '----' || !code) {
+    showMsg('没有可打印的标签，请先扫码！', 'warn');
+    return;
+  }
+  window.print();
 }
 </script>
 </body>
