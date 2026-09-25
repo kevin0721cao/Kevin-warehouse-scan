@@ -51,7 +51,7 @@
     .scan-area { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
     .scan-input { font-size: 20px!important; font-weight: 800; padding: 10px; width: 100%; border: 2px solid #3b82f6; border-radius: 10px; }
     
-    input[type=text], input[type=email], input[type=password], input[type=file], select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    input[type=text], input[type=number], input[type=email], input[type=password], input[type=file], select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
     button { border: 0; border-radius: 8px; padding: 10px 16px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: white; }
@@ -59,6 +59,17 @@
     .btn-green { background: var(--green); color: white; }
     .btn-red { background: var(--red); color: white; }
     .btn-gray { background: #e5e7eb; color: #111827; }
+
+    /* 最近扫描大卡片特有样式 */
+    .recent-scan-box {
+      background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 14px; margin-bottom: 12px;
+      box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
+    }
+    .recent-scan-title { font-size: 13px; color: #1d4ed8; font-weight: bold; margin-bottom: 4px; }
+    .recent-scan-info { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .recent-sku-text { font-size: 16px; font-weight: 800; color: #1e293b; }
+    .qty-controls { display: flex; align-items: center; gap: 6px; }
+    .qty-btn { width: 38px; height: 38px; font-size: 18px; font-weight: bold; padding: 0; border-radius: 8px; }
 
     table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
     th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; }
@@ -99,8 +110,6 @@
     .print-label .sku-title { font-size: 16px; font-weight: 800; margin-bottom: 4px; word-break: break-all; }
     .print-label .sku-name { font-size: 13px; color: #374151; margin-bottom: 8px; word-break: break-all; max-height: 38px; overflow: hidden; }
     .print-label svg { width: 100%!important; height: 90px!important; }
-
-    .highlight-row { background-color: #fef08a !important; transition: background-color 0.5s ease; }
 
     .hidden { display: none !important; }
     .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
@@ -220,8 +229,26 @@
       <div class="stat-card"><b id="shipTotalQty">0</b><span>发货总件数</span></div>
     </div>
 
+    <!-- ⚡ 最近扫描商品调整区（专针对整托盘/连扫修改数量） -->
+    <div id="shipRecentBox" class="recent-scan-box hidden">
+      <div class="recent-scan-title">⚡ 刚刚扫描的商品（无需键盘，点按钮即可快速整托加减）：</div>
+      <div class="recent-scan-info">
+        <div>
+          <div id="shipRecentSku" class="recent-sku-text">--</div>
+          <div id="shipRecentName" style="font-size:12px; color:#475569;">--</div>
+        </div>
+        <div class="qty-controls">
+          <button class="btn-gray qty-btn" onclick="adjustRecentQty('ship', -1)">-1</button>
+          <input type="number" id="shipRecentQtyInput" inputmode="numeric" style="width:75px; text-align:center; font-size:18px; font-weight:bold; padding:6px;" onchange="setRecentQtyDirect('ship', this.value)">
+          <button class="btn-blue qty-btn" onclick="adjustRecentQty('ship', 1)">+1</button>
+          <button class="btn-green" style="padding:8px 12px;" onclick="adjustRecentQty('ship', 10)">+10</button>
+          <button class="btn-green" style="padding:8px 12px;" onclick="adjustRecentQty('ship', 50)">+50</button>
+        </div>
+      </div>
+    </div>
+
     <div class="scan-area">
-      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码录入...（命中已有SKU将自动高亮数量框方便直接修改）" autocomplete="off">
+      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码录入（每次扫码自动+1）..." autocomplete="off">
       <button class="btn-blue" onclick="handleShipScan()">确认扫描</button>
     </div>
 
@@ -265,6 +292,24 @@
       <div class="stat-card"><b id="recPlanQty">0</b><span>国内发货总数</span></div>
       <div class="stat-card"><b id="recScannedQty">0</b><span>海外实收总数</span></div>
       <div class="stat-card"><b id="recDiffQty">0</b><span>差异件数</span></div>
+    </div>
+
+    <!-- ⚡ 海外收货：最近扫描快捷修改区 -->
+    <div id="recRecentBox" class="recent-scan-box hidden">
+      <div class="recent-scan-title">⚡ 刚刚强扫/修改的商品：</div>
+      <div class="recent-scan-info">
+        <div>
+          <div id="recRecentSku" class="recent-sku-text">--</div>
+          <div id="recRecentName" style="font-size:12px; color:#475569;">--</div>
+        </div>
+        <div class="qty-controls">
+          <button class="btn-gray qty-btn" onclick="adjustRecentQty('rec', -1)">-1</button>
+          <input type="number" id="recRecentQtyInput" inputmode="numeric" style="width:75px; text-align:center; font-size:18px; font-weight:bold; padding:6px;" onchange="setRecentQtyDirect('rec', this.value)">
+          <button class="btn-blue qty-btn" onclick="adjustRecentQty('rec', 1)">+1</button>
+          <button class="btn-green" style="padding:8px 12px;" onclick="adjustRecentQty('rec', 10)">+10</button>
+          <button class="btn-green" style="padding:8px 12px;" onclick="adjustRecentQty('rec', 50)">+50</button>
+        </div>
+      </div>
     </div>
 
     <div id="receiveScanArea" class="scan-area hidden">
@@ -419,6 +464,10 @@ let appData = {
   activeShipmentId: null,
   shelfMapping: {} 
 };
+
+// 记录最近扫描的 SKU 代码，用于顶部的快捷调整
+let recentShipCode = null;
+let recentRecCode = null;
 
 let tempSkuList = []; 
 let html5QrcodeScanner = null;
@@ -750,7 +799,7 @@ function importShipmentExcel() {
   reader.readAsArrayBuffer(file);
 }
 
-// ★【优化后】国内发货扫码：如果命中已有SKU，自动定位高亮并选中数量框
+// ★ 恢复默认：扫描一次自动+1，并刷新快捷修改大卡片
 function handleShipScan() {
   const input = document.getElementById('shipScanInput');
   const code = input.value.trim();
@@ -758,21 +807,18 @@ function handleShipScan() {
 
   if (!code) return;
 
-  // 判断是否已有该 SKU
-  if (appData.currentShipment[code] !== undefined) {
-    playAudioNotice('ok');
-    showMsg(`SKU [${code}] 已存在，已自动定位高亮！请输入数量后按回车。`, 'warn');
-    focusAndHighlightQty('ship', code);
-    return;
-  }
+  appData.currentShipment[code] = (appData.currentShipment[code] || 0) + 1;
+  recentShipCode = code;
 
-  // 首次扫描新 SKU，默认加 1
-  appData.currentShipment[code] = 1;
   saveData();
   renderShipTable();
-  
+  updateRecentBox('ship', code);
+
+  const master = appData.masterSkuList.find(x => x.code === code);
+  const name = master ? master.name : '（未知SKU）';
+  showMsg(`[已+1] ${name} (当前累计: ${appData.currentShipment[code]})`, 'ok');
   playAudioNotice('ok');
-  showMsg(`已新增 SKU: ${code}`, 'ok');
+
   input.focus();
 }
 
@@ -780,25 +826,89 @@ document.getElementById('shipScanInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); handleShipScan(); }
 });
 
-// 定位并全选数量输入框的公共辅助函数
-function focusAndHighlightQty(type, code) {
-  const inputId = `${type}-qty-${code}`;
-  const rowId = `${type}-row-${code}`;
-  const qtyEl = document.getElementById(inputId);
-  const rowEl = document.getElementById(rowId);
+// 快捷调整（按 +1 / -1 / +10 / +50 按钮）
+function adjustRecentQty(type, delta) {
+  const code = type === 'ship' ? recentShipCode : recentRecCode;
+  if (!code) return;
 
-  if (qtyEl) {
-    if (rowEl) {
-      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      rowEl.classList.add('highlight-row');
-      setTimeout(() => rowEl.classList.remove('highlight-row'), 2000);
-    }
-    qtyEl.focus();
-    qtyEl.select(); // 全选数字，直接键盘敲新数量回车即可
+  if (type === 'ship') {
+    const curr = appData.currentShipment[code] || 0;
+    const next = curr + delta;
+    if (next <= 0) delete appData.currentShipment[code];
+    else appData.currentShipment[code] = next;
+    saveData();
+    renderShipTable();
+    updateRecentBox('ship', code);
+  } else {
+    const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
+    if (!shipment) return;
+    if (!shipment.receiveItems) shipment.receiveItems = {};
+    const curr = shipment.receiveItems[code] || 0;
+    const next = curr + delta;
+    if (next <= 0) delete shipment.receiveItems[code];
+    else shipment.receiveItems[code] = next;
+    saveData();
+    renderReceiveTable();
+    updateRecentBox('rec', code);
+  }
+
+  showMsg(`已调整数量 [${delta > 0 ? '+' + delta : delta}]`, 'ok');
+  playAudioNotice('ok');
+}
+
+// 输入框直接设定最终数量
+function setRecentQtyDirect(type, val) {
+  const code = type === 'ship' ? recentShipCode : recentRecCode;
+  if (!code) return;
+
+  const num = parseInt(val);
+  if (type === 'ship') {
+    if (isNaN(num) || num <= 0) delete appData.currentShipment[code];
+    else appData.currentShipment[code] = num;
+    saveData();
+    renderShipTable();
+    updateRecentBox('ship', code);
+  } else {
+    const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
+    if (!shipment) return;
+    if (isNaN(num) || num <= 0) delete shipment.receiveItems[code];
+    else shipment.receiveItems[code] = num;
+    saveData();
+    renderReceiveTable();
+    updateRecentBox('rec', code);
   }
 }
 
-// 修改发货数量
+// 刷新顶部“最近扫描”快捷卡片 UI
+function updateRecentBox(type, code) {
+  const box = document.getElementById(`${type}RecentBox`);
+  const skuEl = document.getElementById(`${type}RecentSku`);
+  const nameEl = document.getElementById(`${type}RecentName`);
+  const inputEl = document.getElementById(`${type}RecentQtyInput`);
+
+  if (!code) {
+    box.classList.add('hidden');
+    return;
+  }
+
+  const master = appData.masterSkuList.find(x => x.code === code);
+  const name = master ? master.name : '（未匹配基础库名称）';
+
+  let currentQty = 0;
+  if (type === 'ship') {
+    currentQty = appData.currentShipment[code] || 0;
+  } else {
+    const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
+    currentQty = (shipment && shipment.receiveItems) ? (shipment.receiveItems[code] || 0) : 0;
+  }
+
+  skuEl.textContent = code;
+  nameEl.textContent = name;
+  inputEl.value = currentQty;
+
+  box.classList.remove('hidden');
+}
+
 function updateShipQty(code, qty) {
   const num = parseInt(qty);
   if (isNaN(num) || num <= 0) {
@@ -808,28 +918,24 @@ function updateShipQty(code, qty) {
   }
   saveData();
   renderShipTable();
-}
-
-// 数量框修改完毕按回车后，自动跳回主扫码框
-function handleQtyInputKeydown(e, targetScanInputId) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const scanInput = document.getElementById(targetScanInputId);
-    if (scanInput) scanInput.focus();
-  }
+  if (recentShipCode === code) updateRecentBox('ship', code);
 }
 
 function removeShipItem(code) {
   delete appData.currentShipment[code];
+  if (recentShipCode === code) recentShipCode = null;
   saveData();
   renderShipTable();
+  updateRecentBox('ship', recentShipCode);
 }
 
 function clearShipList() {
   if (confirm('确定要重置发货列表吗？')) {
     appData.currentShipment = {};
+    recentShipCode = null;
     saveData();
     renderShipTable();
+    updateRecentBox('ship', null);
   }
 }
 
@@ -853,14 +959,11 @@ function renderShipTable() {
     const name = master ? master.name : `<span style="color:var(--red);">基础库未找到此SKU</span>`;
     const qty = appData.currentShipment[code];
     return `
-      <tr id="ship-row-${code}">
+      <tr>
         <td><b>${code}</b></td>
         <td>${name}</td>
         <td>
-          <input type="number" id="ship-qty-${code}" min="1" value="${qty}" 
-                 style="width:100px; padding:6px; font-weight:bold; text-align:center;" 
-                 onchange="updateShipQty('${code}', this.value)"
-                 onkeydown="handleQtyInputKeydown(event, 'shipScanInput')">
+          <input type="number" inputmode="numeric" min="1" value="${qty}" style="width:100px; padding:6px; font-weight:bold;" onchange="updateShipQty('${code}', this.value)">
         </td>
         <td><button class="btn-red" style="padding:4px 8px; font-size:12px;" onclick="removeShipItem('${code}')">删除</button></td>
       </tr>
@@ -886,9 +989,11 @@ function submitShipment() {
 
   appData.shipmentHistory.unshift(newShipment);
   appData.currentShipment = {};
+  recentShipCode = null;
   saveData();
 
   renderShipTable();
+  updateRecentBox('ship', null);
   updateShipmentSelect();
   showMsg(`发货单 ${shipId} 已成功生成！并保存至云端`, 'ok');
   
@@ -945,7 +1050,7 @@ function startReceiving() {
   setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
-// 海外收货扫码
+// 海外收货扫码：自动+1，并刷新快捷调节框
 function handleReceiveScan() {
   const input = document.getElementById('receiveScanInput');
   const code = input.value.trim();
@@ -957,28 +1062,22 @@ function handleReceiveScan() {
   if (!shipment) return;
 
   if (!shipment.receiveItems) shipment.receiveItems = {};
+  shipment.receiveItems[code] = (shipment.receiveItems[code] || 0) + 1;
+  recentRecCode = code;
 
-  // 如果已经收过该货品，定位并高亮数量框
-  if (shipment.receiveItems[code] !== undefined) {
-    playAudioNotice('ok');
-    showMsg(`[实收盘点] SKU [${code}] 已存在，自动定位数量框！`, 'warn');
-    focusAndHighlightQty('rec', code);
-    return;
-  }
-
-  shipment.receiveItems[code] = 1;
   saveData();
+  renderReceiveTable();
+  updateRecentBox('rec', code);
 
   const isExpected = shipment.items[code] !== undefined;
   if (isExpected) {
-    showMsg(`[实收新增] 扫描成功: ${code}`, 'ok');
+    showMsg(`[实收+1] 扫描成功: ${code}`, 'ok');
     playAudioNotice('ok');
   } else {
     showMsg(`[警告] 扫描到国内发货单以外的商品: ${code}`, 'warn');
     playAudioNotice('bad');
   }
 
-  renderReceiveTable();
   input.focus();
 }
 
@@ -998,6 +1097,7 @@ function updateRecQty(code, qty) {
   }
   saveData();
   renderReceiveTable();
+  if (recentRecCode === code) updateRecentBox('rec', code);
 }
 
 function renderReceiveTable() {
@@ -1029,15 +1129,12 @@ function renderReceiveTable() {
     else if (diff > 0) statusTag = `<span class="badge badge-warn">多货 ${diff}</span>`;
 
     return `
-      <tr id="rec-row-${code}">
+      <tr>
         <td><b>${code}</b></td>
         <td>${name}</td>
         <td>${plan}</td>
         <td>
-          <input type="number" id="rec-qty-${code}" min="0" value="${rec}" 
-                 style="width:90px; padding:6px; font-weight:bold; text-align:center;" 
-                 onchange="updateRecQty('${code}', this.value)"
-                 onkeydown="handleQtyInputKeydown(event, 'receiveScanInput')">
+          <input type="number" inputmode="numeric" min="0" value="${rec}" style="width:90px; padding:6px; font-weight:bold;" onchange="updateRecQty('${code}', this.value)">
         </td>
         <td style="color:${diff < 0 ? 'var(--red)' : (diff > 0 ? 'var(--warn)' : 'var(--green)')}">${diff > 0 ? '+' + diff : diff}</td>
         <td>${statusTag}</td>
