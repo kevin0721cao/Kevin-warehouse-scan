@@ -91,7 +91,6 @@
     .modal .form-group { margin-bottom: 12px; }
     .modal label { font-size: 12px; font-weight: bold; color: var(--muted); display: block; margin-bottom: 4px; }
 
-    /* 打印标签专用卡片样式 */
     .print-card-box {
       border: 2px dashed #cbd5e1; border-radius: 12px; padding: 24px; text-align: center;
       background: #fafafa; margin-top: 15px; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -100,6 +99,8 @@
     .print-label .sku-title { font-size: 16px; font-weight: 800; margin-bottom: 4px; word-break: break-all; }
     .print-label .sku-name { font-size: 13px; color: #374151; margin-bottom: 8px; word-break: break-all; max-height: 38px; overflow: hidden; }
     .print-label svg { width: 100%!important; height: 90px!important; }
+
+    .highlight-row { background-color: #fef08a !important; transition: background-color 0.5s ease; }
 
     .hidden { display: none !important; }
     .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
@@ -220,7 +221,7 @@
     </div>
 
     <div class="scan-area">
-      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码补充，或直接在下方表格修改数量..." autocomplete="off">
+      <input type="text" id="shipScanInput" class="scan-input" placeholder="扫码录入...（命中已有SKU将自动高亮数量框方便直接修改）" autocomplete="off">
       <button class="btn-blue" onclick="handleShipScan()">确认扫描</button>
     </div>
 
@@ -315,14 +316,13 @@
     </div>
   </div>
 
-  <!-- STEP 5: 货架位绑定 (新功能) -->
+  <!-- STEP 5: 货架位绑定 -->
   <div id="step5" class="card hidden">
     <div class="title">
       <span>步骤五：SKU 批量绑定货架位</span>
       <span class="badge badge-blue" id="shelfBindStatusBadge">等待扫描商品</span>
     </div>
 
-    <!-- 扫码模式选择器 -->
     <div class="import-box" style="margin-bottom: 12px;">
       <div style="font-weight: bold; font-size: 13px; margin-bottom: 8px; color: var(--blue);">📱 选择扫码输入设备：</div>
       <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
@@ -334,19 +334,16 @@
         </label>
       </div>
 
-      <!-- 摄像头预览区域 -->
       <div id="cameraArea" class="hidden" style="margin-top: 12px;">
         <div id="reader" style="width: 100%; max-width: 400px; margin: auto; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;"></div>
       </div>
     </div>
 
-    <!-- 扫码录入输入框 -->
     <div class="scan-area">
       <input type="text" id="shelfScanInput" class="scan-input" placeholder="依次扫描多个 SKU 标签，最后扫描货架位号..." autocomplete="off">
       <button class="btn-blue" onclick="handleShelfInput(document.getElementById('shelfScanInput').value.trim())">确认添加</button>
     </div>
 
-    <!-- 待绑定列表区 -->
     <div style="background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <b style="font-size: 14px; color: var(--blue);">🛒 当前待绑定的 SKU 列表 (<span id="tempSkuCount">0</span>)</b>
@@ -357,13 +354,11 @@
       </div>
     </div>
 
-    <!-- 目标货架位设置及提交 -->
     <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
       <input type="text" id="shelfCodeInput" placeholder="扫描或输入目标货架号 (例如: A-01-02)..." style="font-weight: bold; font-size: 16px;">
       <button class="btn-green" style="white-space: nowrap; padding: 12px 20px;" onclick="confirmBindShelf()">✅ 确认绑定上述 SKU 至此货架</button>
     </div>
 
-    <!-- 已绑定关系记录表 -->
     <div class="title" style="margin-top: 20px;">
       <span>📌 已绑定的 SKU-货架位对照表</span>
       <button class="btn-gray" style="padding: 4px 10px; font-size: 12px;" onclick="exportShelfMapExcel()">导出货架绑定表 (Excel)</button>
@@ -422,10 +417,10 @@ let appData = {
   currentShipment: {},
   shipmentHistory: [],
   activeShipmentId: null,
-  shelfMapping: {} // { skuCode: ["A-01-01", "B-02-03"] }
+  shelfMapping: {} 
 };
 
-let tempSkuList = []; // 货架绑定暂存的 SKU
+let tempSkuList = []; 
 let html5QrcodeScanner = null;
 
 auth.onAuthStateChanged(user => {
@@ -585,10 +580,9 @@ function showMsg(text, type = 'ok') {
   box.timer = setTimeout(() => box.className = 'message', 4000);
 }
 
-// 语音合成（TTS）报错与音效播放
 function speakText(text) {
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // 停止先前的朗读
+    window.speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance(text);
     msg.lang = 'zh-CN';
     msg.rate = 1.1;
@@ -756,29 +750,55 @@ function importShipmentExcel() {
   reader.readAsArrayBuffer(file);
 }
 
-// 国内发货扫描/编辑
+// ★【优化后】国内发货扫码：如果命中已有SKU，自动定位高亮并选中数量框
 function handleShipScan() {
   const input = document.getElementById('shipScanInput');
   const code = input.value.trim();
   input.value = '';
-  input.focus();
 
   if (!code) return;
 
-  appData.currentShipment[code] = (appData.currentShipment[code] || 0) + 1;
+  // 判断是否已有该 SKU
+  if (appData.currentShipment[code] !== undefined) {
+    playAudioNotice('ok');
+    showMsg(`SKU [${code}] 已存在，已自动定位高亮！请输入数量后按回车。`, 'warn');
+    focusAndHighlightQty('ship', code);
+    return;
+  }
+
+  // 首次扫描新 SKU，默认加 1
+  appData.currentShipment[code] = 1;
   saveData();
   renderShipTable();
   
-  const master = appData.masterSkuList.find(x => x.code === code);
-  const name = master ? master.name : '（未知SKU，建议补充进基础库）';
-  showMsg(`[已加1] ${name} (当前累计: ${appData.currentShipment[code]})`, 'ok');
   playAudioNotice('ok');
+  showMsg(`已新增 SKU: ${code}`, 'ok');
+  input.focus();
 }
 
 document.getElementById('shipScanInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); handleShipScan(); }
 });
 
+// 定位并全选数量输入框的公共辅助函数
+function focusAndHighlightQty(type, code) {
+  const inputId = `${type}-qty-${code}`;
+  const rowId = `${type}-row-${code}`;
+  const qtyEl = document.getElementById(inputId);
+  const rowEl = document.getElementById(rowId);
+
+  if (qtyEl) {
+    if (rowEl) {
+      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      rowEl.classList.add('highlight-row');
+      setTimeout(() => rowEl.classList.remove('highlight-row'), 2000);
+    }
+    qtyEl.focus();
+    qtyEl.select(); // 全选数字，直接键盘敲新数量回车即可
+  }
+}
+
+// 修改发货数量
 function updateShipQty(code, qty) {
   const num = parseInt(qty);
   if (isNaN(num) || num <= 0) {
@@ -788,6 +808,15 @@ function updateShipQty(code, qty) {
   }
   saveData();
   renderShipTable();
+}
+
+// 数量框修改完毕按回车后，自动跳回主扫码框
+function handleQtyInputKeydown(e, targetScanInputId) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const scanInput = document.getElementById(targetScanInputId);
+    if (scanInput) scanInput.focus();
+  }
 }
 
 function removeShipItem(code) {
@@ -824,11 +853,14 @@ function renderShipTable() {
     const name = master ? master.name : `<span style="color:var(--red);">基础库未找到此SKU</span>`;
     const qty = appData.currentShipment[code];
     return `
-      <tr>
+      <tr id="ship-row-${code}">
         <td><b>${code}</b></td>
         <td>${name}</td>
         <td>
-          <input type="number" min="1" value="${qty}" style="width:100px; padding:6px; font-weight:bold;" onchange="updateShipQty('${code}', this.value)">
+          <input type="number" id="ship-qty-${code}" min="1" value="${qty}" 
+                 style="width:100px; padding:6px; font-weight:bold; text-align:center;" 
+                 onchange="updateShipQty('${code}', this.value)"
+                 onkeydown="handleQtyInputKeydown(event, 'shipScanInput')">
         </td>
         <td><button class="btn-red" style="padding:4px 8px; font-size:12px;" onclick="removeShipItem('${code}')">删除</button></td>
       </tr>
@@ -913,11 +945,11 @@ function startReceiving() {
   setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
 }
 
+// 海外收货扫码
 function handleReceiveScan() {
   const input = document.getElementById('receiveScanInput');
   const code = input.value.trim();
   input.value = '';
-  input.focus();
 
   if (!code) return;
 
@@ -925,12 +957,21 @@ function handleReceiveScan() {
   if (!shipment) return;
 
   if (!shipment.receiveItems) shipment.receiveItems = {};
-  shipment.receiveItems[code] = (shipment.receiveItems[code] || 0) + 1;
+
+  // 如果已经收过该货品，定位并高亮数量框
+  if (shipment.receiveItems[code] !== undefined) {
+    playAudioNotice('ok');
+    showMsg(`[实收盘点] SKU [${code}] 已存在，自动定位数量框！`, 'warn');
+    focusAndHighlightQty('rec', code);
+    return;
+  }
+
+  shipment.receiveItems[code] = 1;
   saveData();
 
   const isExpected = shipment.items[code] !== undefined;
   if (isExpected) {
-    showMsg(`[实收+1] 扫描成功: ${code}`, 'ok');
+    showMsg(`[实收新增] 扫描成功: ${code}`, 'ok');
     playAudioNotice('ok');
   } else {
     showMsg(`[警告] 扫描到国内发货单以外的商品: ${code}`, 'warn');
@@ -938,11 +979,26 @@ function handleReceiveScan() {
   }
 
   renderReceiveTable();
+  input.focus();
 }
 
 document.getElementById('receiveScanInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); handleReceiveScan(); }
 });
+
+function updateRecQty(code, qty) {
+  const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
+  if (!shipment) return;
+
+  const num = parseInt(qty);
+  if (isNaN(num) || num <= 0) {
+    delete shipment.receiveItems[code];
+  } else {
+    shipment.receiveItems[code] = num;
+  }
+  saveData();
+  renderReceiveTable();
+}
 
 function renderReceiveTable() {
   const shipment = appData.shipmentHistory.find(s => s.id === appData.activeShipmentId);
@@ -973,11 +1029,16 @@ function renderReceiveTable() {
     else if (diff > 0) statusTag = `<span class="badge badge-warn">多货 ${diff}</span>`;
 
     return `
-      <tr>
+      <tr id="rec-row-${code}">
         <td><b>${code}</b></td>
         <td>${name}</td>
         <td>${plan}</td>
-        <td><b>${rec}</b></td>
+        <td>
+          <input type="number" id="rec-qty-${code}" min="0" value="${rec}" 
+                 style="width:90px; padding:6px; font-weight:bold; text-align:center;" 
+                 onchange="updateRecQty('${code}', this.value)"
+                 onkeydown="handleQtyInputKeydown(event, 'receiveScanInput')">
+        </td>
         <td style="color:${diff < 0 ? 'var(--red)' : (diff > 0 ? 'var(--warn)' : 'var(--green)')}">${diff > 0 ? '+' + diff : diff}</td>
         <td>${statusTag}</td>
       </tr>
@@ -1097,7 +1158,7 @@ function triggerPrint() {
   window.print();
 }
 
-// STEP 5: 货架位绑定模块 (新逻辑)
+// STEP 5: 货架位绑定模块
 function toggleScanMode() {
   const mode = document.querySelector('input[name="scanMode"]:checked').value;
   const cameraArea = document.getElementById('cameraArea');
@@ -1137,13 +1198,11 @@ function stopCamera() {
   }
 }
 
-// 统一扫码/输入处理函数 (智能识别是 SKU 还是 货架位)
 function handleShelfInput(code) {
   const input = document.getElementById('shelfScanInput');
   input.value = '';
   if (!code) return;
 
-  // 判断是否为货架位编码（前缀带 LOC- 或 SHELF- 或以 A/B/C/Z 开头的货架号命名惯例，也可以手动在下方框中设置）
   const isShelfCode = /^(LOC|SHELF|[A-Z]-\d+)/i.test(code);
 
   if (isShelfCode && tempSkuList.length > 0) {
@@ -1152,7 +1211,6 @@ function handleShelfInput(code) {
     return;
   }
 
-  // 处理 SKU 录入
   if (tempSkuList.includes(code)) {
     speakText("重复");
     playAudioNotice('bad');
@@ -1205,7 +1263,6 @@ function clearTempSkuList() {
   renderTempSkuList();
 }
 
-// 确认绑定（支持 1 个 SKU 绑定多个货架）
 function confirmBindShelf() {
   const shelfCode = document.getElementById('shelfCodeInput').value.trim();
   if (!shelfCode) {
@@ -1226,7 +1283,6 @@ function confirmBindShelf() {
     if (!appData.shelfMapping[code]) {
       appData.shelfMapping[code] = [];
     }
-    // 如果该 SKU 尚未绑定此货架，则追加（允许1对多）
     if (!appData.shelfMapping[code].includes(shelfCode)) {
       appData.shelfMapping[code].push(shelfCode);
     }
