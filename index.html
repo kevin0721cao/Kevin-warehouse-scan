@@ -43,8 +43,8 @@
     .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
     .title { font-weight: 800; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     
-    .step-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px; }
-    .tab-btn { border: none; padding: 12px 6px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); text-align: center; font-size: 13px; }
+    .step-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 12px; }
+    .tab-btn { border: none; padding: 10px 4px; border-radius: 10px; background: #e5e7eb; font-weight: bold; cursor: pointer; color: var(--muted); text-align: center; font-size: 12px; }
     .tab-btn.active { background: var(--blue); color: white; }
 
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -70,6 +70,18 @@
     .recent-sku-text { font-size: 16px; font-weight: 800; color: #1e293b; }
     .qty-controls { display: flex; align-items: center; gap: 6px; }
     .qty-btn { width: 38px; height: 38px; font-size: 18px; font-weight: bold; padding: 0; border-radius: 8px; }
+
+    /* 扫码速查大卡片专属样式 */
+    .lookup-card-box {
+      background: #f8fafc; border: 2px solid #3b82f6; border-radius: 14px; padding: 24px;
+      text-align: center; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+      transition: all 0.3s ease;
+    }
+    .lookup-card-box.found { background: #f0fdf4; border-color: var(--green); }
+    .lookup-card-box.not-found { background: #fef2f2; border-color: var(--red); }
+    .lookup-sku-code { font-size: 28px; font-weight: 900; color: #0f172a; margin: 8px 0; word-break: break-all; }
+    .lookup-sku-name { font-size: 22px; font-weight: 800; color: var(--blue); margin-bottom: 12px; word-break: break-all; }
+    .lookup-shelf-info { font-size: 15px; color: #475569; font-weight: bold; display: inline-block; background: #ffffff; padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; }
 
     table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
     th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; }
@@ -113,7 +125,7 @@
 
     .hidden { display: none !important; }
     .import-box { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 10px; margin-bottom: 12px; }
-    @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } .step-tabs { grid-template-columns: 1fr 1fr; } }
+    @media(max-width: 640px) { .grid2, .stats-bar { grid-template-columns: 1fr 1fr; } .step-tabs { grid-template-columns: repeat(3, 1fr); } }
 
     @media print {
       body * { visibility: hidden; }
@@ -149,7 +161,7 @@
   <div class="header">
     <div>
       <h1>店铺出入库盘点系统 (超级管理员版)</h1>
-      <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 便携标签打印 ➔ 货架位绑定</p>
+      <p>基础SKU库 ➔ 国内发货清单 ➔ 海外收货盘点 ➔ 便携标签打印 ➔ 货架绑定 ➔ 扫码查名</p>
     </div>
     <div class="user-box">
       <span id="dbStatusTag" class="db-status">连接检查中...</span>
@@ -178,6 +190,7 @@
     <button class="tab-btn" id="tab3" onclick="switchStep(3)">3. 海外收货盘点</button>
     <button class="tab-btn" id="tab4" onclick="switchStep(4)">4. 便携大标签打印 🖨️</button>
     <button class="tab-btn" id="tab5" onclick="switchStep(5)">5. 货架位绑定 📦</button>
+    <button class="tab-btn" id="tab6" onclick="switchStep(6)">6. 扫码查SKU名称 🔍</button>
   </div>
 
   <!-- STEP 1: SKU基础库导入 -->
@@ -420,6 +433,46 @@
     </div>
   </div>
 
+  <!-- STEP 6: 扫码即查 SKU 名称 (新增功能页面) -->
+  <div id="step6" class="card hidden">
+    <div class="title">
+      <span>步骤六：SKU 扫码速查商品名称</span>
+      <label style="font-size:13px; font-weight:normal; cursor:pointer; color:var(--blue);">
+        <input type="checkbox" id="lookupSpeechToggle" checked> 扫码后自动语音播报商品名
+      </label>
+    </div>
+    <p style="font-size: 13px; color: var(--muted);">扫描或输入 SKU 条码，页面将自动检索并放大显示对应的商品名称及货架位置信息。</p>
+
+    <div class="scan-area">
+      <input type="text" id="lookupScanInput" class="scan-input" placeholder="请扫描或输入 SKU 条码..." autocomplete="off">
+      <button class="btn-blue" onclick="handleLookupScan()">查询 SKU</button>
+    </div>
+
+    <!-- 检索显示卡片 -->
+    <div id="lookupCard" class="lookup-card-box">
+      <div style="font-size: 13px; color: var(--muted); font-weight: bold;">扫码查询结果</div>
+      <div id="lookupSkuCode" class="lookup-sku-code">----</div>
+      <div id="lookupSkuName" class="lookup-sku-name">等待扫描商品 SKU 条形码...</div>
+      <div id="lookupShelfInfo" class="lookup-shelf-info">关联货架位：--</div>
+    </div>
+
+    <!-- 最近查询历史记录 -->
+    <div class="title" style="margin-top: 20px;">
+      <span>🕒 最近查询历史 (本页)</span>
+      <button class="btn-gray" style="padding: 4px 10px; font-size: 12px;" onclick="clearLookupHistory()">清空历史</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>时间</th><th>SKU码</th><th>商品名称</th><th>货架位</th><th>状态</th></tr>
+        </thead>
+        <tbody id="lookupHistoryTable">
+          <tr><td colspan="5" style="text-align:center; color:var(--muted);">暂无查询记录</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -471,6 +524,9 @@ let recentRecCode = null;
 
 let tempSkuList = []; 
 let html5QrcodeScanner = null;
+
+// 查询步骤 6 的历史记录
+let lookupHistory = [];
 
 auth.onAuthStateChanged(user => {
   if (user) {
@@ -661,7 +717,7 @@ function playAudioNotice(type = 'ok') {
 }
 
 function switchStep(step) {
-  [1, 2, 3, 4, 5].forEach(i => {
+  [1, 2, 3, 4, 5, 6].forEach(i => {
     document.getElementById(`step${i}`).classList.toggle('hidden', i !== step);
     document.getElementById(`tab${i}`).classList.toggle('active', i === step);
   });
@@ -674,6 +730,7 @@ function switchStep(step) {
   if(step === 3 && appData.activeShipmentId) setTimeout(() => document.getElementById('receiveScanInput').focus(), 100);
   if(step === 4) setTimeout(() => document.getElementById('printScanInput').focus(), 100);
   if(step === 5) setTimeout(() => document.getElementById('shelfScanInput').focus(), 100);
+  if(step === 6) setTimeout(() => document.getElementById('lookupScanInput').focus(), 100);
 }
 
 // SKU 基础库解析
@@ -799,7 +856,7 @@ function importShipmentExcel() {
   reader.readAsArrayBuffer(file);
 }
 
-// ★ 恢复默认：扫描一次自动+1，并刷新快捷修改大卡片
+// 扫描一次自动+1，并刷新快捷修改大卡片
 function handleShipScan() {
   const input = document.getElementById('shipScanInput');
   const code = input.value.trim();
@@ -1478,6 +1535,97 @@ async function exportShelfMapExcel() {
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `SKU货架绑定对照表_${new Date().toISOString().slice(0,10)}.xlsx`);
   showMsg("货架绑定表导出成功！", "ok");
+}
+
+// STEP 6: SKU 扫码速查名称模块逻辑
+function handleLookupScan() {
+  const input = document.getElementById('lookupScanInput');
+  const code = input.value.trim();
+  input.value = '';
+  input.focus();
+
+  if (!code) return;
+
+  const card = document.getElementById('lookupCard');
+  const codeEl = document.getElementById('lookupSkuCode');
+  const nameEl = document.getElementById('lookupSkuName');
+  const shelfEl = document.getElementById('lookupShelfInfo');
+
+  const master = appData.masterSkuList.find(x => x.code === code);
+  const shelves = appData.shelfMapping[code] ? appData.shelfMapping[code].join(', ') : '未绑定货架';
+
+  codeEl.textContent = code;
+
+  let isFound = false;
+  let skuName = '';
+
+  if (master) {
+    isFound = true;
+    skuName = master.name;
+    nameEl.textContent = master.name;
+    nameEl.style.color = "var(--green)";
+    card.className = "lookup-card-box found";
+    playAudioNotice('ok');
+    showMsg(`查询成功：${master.name}`, 'ok');
+
+    if (document.getElementById('lookupSpeechToggle').checked) {
+      speakText(master.name);
+    }
+  } else {
+    isFound = false;
+    skuName = "⚠️ 基础库未匹配到此 SKU 名称";
+    nameEl.textContent = skuName;
+    nameEl.style.color = "var(--red)";
+    card.className = "lookup-card-box not-found";
+    playAudioNotice('bad');
+    showMsg(`基础库未未查到 SKU [${code}] 的名称`, 'bad');
+
+    if (document.getElementById('lookupSpeechToggle').checked) {
+      speakText("未查到商品");
+    }
+  }
+
+  shelfEl.textContent = `关联货架位：${shelves}`;
+
+  // 写入历史记录
+  lookupHistory.unshift({
+    time: new Date().toLocaleTimeString(),
+    code,
+    name: skuName,
+    shelves,
+    found: isFound
+  });
+
+  renderLookupHistory();
+}
+
+document.getElementById('lookupScanInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); handleLookupScan(); }
+});
+
+function renderLookupHistory() {
+  const tbody = document.getElementById('lookupHistoryTable');
+  if (lookupHistory.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--muted);">暂无查询记录</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lookupHistory.map(item => `
+    <tr>
+      <td style="color:var(--muted);">${item.time}</td>
+      <td><b>${item.code}</b></td>
+      <td>${item.name}</td>
+      <td>${item.shelves}</td>
+      <td>
+        ${item.found ? '<span class="badge badge-green">存在</span>' : '<span class="badge badge-red">未找到</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function clearLookupHistory() {
+  lookupHistory = [];
+  renderLookupHistory();
 }
 </script>
 </body>
